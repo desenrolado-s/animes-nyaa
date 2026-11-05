@@ -11,8 +11,9 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Pango', '1.0')
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
-from . import anilist, episode_titles, library
-from .ui_common import IMAGE_POOL
+from ..services import anilist, episode_titles
+from ..storage import library
+from .common import IMAGE_POOL
 
 
 class _PlainText(HTMLParser):

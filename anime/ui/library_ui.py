@@ -5,8 +5,9 @@ gi.require_version('Gdk', '4.0')
 gi.require_version('Gtk', '4.0')
 from gi.repository import Adw, Gdk, GLib, Gtk
 
-from . import anilist, library
-from .ui_common import IMAGE_POOL
+from ..services import anilist
+from ..storage import library
+from .common import IMAGE_POOL
 
 
 class LibraryUI:

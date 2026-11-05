@@ -11,8 +11,9 @@ gi.require_version('Adw', '1')
 gi.require_version('Gtk', '4.0')
 from gi.repository import Adw, GLib, Gtk
 
-from . import anilist, history, library, nyaa, settings, torrent
-from .ui_common import CATEGORY_CODES
+from ..services import anilist, nyaa, torrent
+from ..storage import history, library, settings
+from .common import CATEGORY_CODES
 
 
 class ResultsUI:

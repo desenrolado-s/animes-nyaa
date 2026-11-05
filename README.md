@@ -39,17 +39,11 @@ Adicione o diretório do projeto ao `PATH` (por exemplo, criando um link em `~/.
 
 - `anime_app.py`: ponto de entrada GTK.
 - `anime/application.py`: inicialização da janela e composição dos componentes.
-- `anime/ui_common.py`: estilos e helpers GTK compartilhados.
-- `anime/catalog_ui.py`: catálogo AniList, busca e capas.
-- `anime/detail_ui.py`: ficha do anime, episódios e navegação de batches.
-- `anime/results_ui.py`: releases Nyaa, arquivos de batch e reprodução no mpv.
-- `anime/history_ui.py`: página do histórico.
-- `anime/library.py` e `anime/library_ui.py`: persistência e interface da lista pessoal e dos batches favoritos.
-- `anime/anilist.py`: busca do catálogo em alta e busca de títulos via AniList GraphQL.
-- `anime/nyaa.py`: consulta e leitura dos resultados do Nyaa.
-- `anime/torrent.py`: lista os episódios de vídeo dentro de um batch torrent.
-- `anime/history.py`: persistência do histórico local.
-- `anime/settings.py`: preferências locais, incluindo a pasta dos vídeos temporários.
+- `anime/ui/`: páginas GTK do catálogo, ficha, resultados, histórico e lista pessoal, além de helpers compartilhados.
+- `anime/services/`: integração com AniList e Nyaa, identificação de títulos de episódios e operações de torrent.
+- `anime/storage/`: persistência do histórico e da lista pessoal, além das preferências locais.
+- `anime/application.py`: inicialização da janela e composição das páginas.
+- `anime_app.py`: ponto de entrada GTK.
 - `anime-nyaa`: lançador do app.
 
 Capas são baixadas sob demanda e armazenadas em `~/.cache/anime-nyaa/covers/` para reutilização offline.

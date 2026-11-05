@@ -6,13 +6,13 @@ gi.require_version('Adw', '1')
 gi.require_version('Gtk', '4.0')
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .catalog_ui import CatalogUI
-from .detail_ui import DetailUI
-from .history_ui import HistoryUI
-from .library_ui import LibraryUI
-from .results_ui import ResultsUI
-from . import settings
-from .ui_common import CommonUI
+from .storage import settings
+from .ui.catalog_ui import CatalogUI
+from .ui.common import CommonUI
+from .ui.detail_ui import DetailUI
+from .ui.history_ui import HistoryUI
+from .ui.library_ui import LibraryUI
+from .ui.results_ui import ResultsUI
 
 
 class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, HistoryUI, LibraryUI):
