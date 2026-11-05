@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Anime Nyaa
+Comment=Search anime torrents and stream them with mpv
+Exec=anime-nyaa
+Icon=anime-nyaa
+Terminal=false
+Categories=AudioVideo;Video;Network;
