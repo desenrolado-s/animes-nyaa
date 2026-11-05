@@ -2,6 +2,9 @@
 
 App desktop GTK 4 que usa o catálogo público do AniList para descobrir animes, mostrar títulos e capas e buscar releases correspondentes no Nyaa. Os torrents são transmitidos pelo WebTorrent e abertos no mpv. O app também mantém histórico local e permite iniciar novamente um item do histórico.
 
+<img width="1912" height="1027" alt="image" src="https://github.com/user-attachments/assets/2b2a4c60-21a2-45b9-9f4c-c48b2bcd39a2" />
+
+
 ## Requisitos
 
 - Linux com GTK 4, Libadwaita e PyGObject
