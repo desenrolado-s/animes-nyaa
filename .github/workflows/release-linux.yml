@@ -9,14 +9,12 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   version:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
@@ -30,9 +28,50 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
+  reserve-version:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 20); do
+            git fetch --force --tags origin
+            tag="v$(bash scripts/next-version.sh)"
+            existing_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)
+            if [[ -n "$existing_sha" ]]; then
+              if [[ "$existing_sha" == "$RELEASE_SHA" ]]; then
+                break
+              fi
+              continue
+            fi
+            if gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" -f sha="${RELEASE_SHA}" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          test -n "${tag:-}"
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha')
+          test "$tag_sha" = "$RELEASE_SHA"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
   build:
-    needs: version
-    if: github.event_name != 'pull_request'
+    needs: [version, reserve-version]
+    if: >-
+      !cancelled() &&
+      (needs.version.result == 'success' || needs.reserve-version.result == 'success')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -66,11 +105,11 @@ jobs:
         run: GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test
       - name: Archive executable bundle
         env:
-          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}
         run: tar -czf "dist/anime-nyaa-linux-x86_64-${RELEASE_TAG}.tar.gz" -C dist anime-nyaa
       - name: Create source archive
         env:
-          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}
         run: git archive --format=tar --prefix=anime-nyaa/ HEAD | gzip -n > "dist/anime-nyaa-source-${RELEASE_TAG}.tar.gz"
       - name: Generate checksums
         working-directory: dist
@@ -82,8 +121,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [version, build]
-    if: github.ref == 'refs/heads/main'
+    needs: [reserve-version, build]
+    if: github.ref == 'refs/heads/main' && needs.reserve-version.result == 'success' && needs.build.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -93,25 +132,17 @@ jobs:
         with:
           name: anime-nyaa-release-assets
           path: release-assets
-      - name: Create version tag for main push
-        if: github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.version.outputs.tag }}
-          RELEASE_SHA: ${{ github.sha }}
-        run: |
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Tag ${RELEASE_TAG} already exists; refusing to move it."
-            exit 1
-          fi
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-            -f ref="refs/tags/${RELEASE_TAG}" -f sha="${RELEASE_SHA}"
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag }}
         run: |
-          gh release create "$RELEASE_TAG" release-assets/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Anime Nyaa $RELEASE_TAG" \
-            --generate-notes
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "Anime Nyaa $RELEASE_TAG" \
+              --generate-notes
+          fi
