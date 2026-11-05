@@ -45,32 +45,36 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
-          git fetch --force --tags origin
-          tag=$(git tag --points-at "$RELEASE_SHA" --list 'v[0-9]*' | sort -V | tail -n 1)
-          if [[ -z "$tag" ]]; then
-            for attempt in $(seq 1 20); do
-              git fetch --force --tags origin
-              tag="v$(bash scripts/next-version.sh)"
-              existing_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)
-              if [[ -n "$existing_sha" ]]; then
-                if [[ "$existing_sha" == "$RELEASE_SHA" ]]; then
-                  break
-                fi
-                sleep 1
-                continue
-              fi
-              if gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-                -f ref="refs/tags/${tag}" -f sha="${RELEASE_SHA}" >/dev/null; then
-                break
-              fi
+          tag_reserved=false
+          for attempt in $(seq 1 20); do
+            git fetch --force --tags origin
+            # Recheck the release SHA after every fetch: a previous attempt or
+            # a concurrent run may have created its tag while this job waited.
+            tag=$(git tag --points-at "$RELEASE_SHA" --list 'v[0-9]*' | sort -V | tail -n 1)
+            if [[ -n "$tag" ]]; then
+              tag_reserved=true
+              break
+            fi
+
+            tag="v$(bash scripts/next-version.sh)"
+            existing_sha=$(git rev-parse --verify "refs/tags/${tag}^{commit}" 2>/dev/null || true)
+            if [[ -n "$existing_sha" ]]; then
               sleep 1
-            done
-          fi
-          if [[ -z "${tag:-}" ]]; then
+              continue
+            fi
+            if gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" -f sha="${RELEASE_SHA}" >/dev/null; then
+              tag_reserved=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$tag_reserved" != true ]]; then
             echo 'Could not reserve a version tag.' >&2
             exit 1
           fi
-          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha')
+          git fetch --force --tags origin
+          tag_sha=$(git rev-parse --verify "refs/tags/${tag}^{commit}")
           if [[ "$tag_sha" != "$RELEASE_SHA" ]]; then
             echo "Tag $tag points to $tag_sha, expected $RELEASE_SHA." >&2
             exit 1
