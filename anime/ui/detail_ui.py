@@ -38,7 +38,6 @@ class DetailUI:
         back.connect('clicked', lambda *_: self.show_catalog())
         nav.append(back)
         self.anime_tabs = Adw.ViewStack(vexpand=True, hexpand=True)
-        self.anime_tabs.set_transition_duration(140)
         self.anime_switcher = Adw.ViewSwitcher(stack=self.anime_tabs)
         self.anime_switcher.set_policy(Adw.ViewSwitcherPolicy.WIDE)
         self.anime_switcher.set_hexpand(True)
