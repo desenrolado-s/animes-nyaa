@@ -49,7 +49,7 @@ class HistoryUI:
         self.history_count.set_text(tr(f'{len(rows)} reproduções'))
         for item in rows:
             title = item.get('title') or tr('Anime sem título')
-            episode = item.get('episode_file') or item.get('release') or 'Release desconhecida'
+            episode = item.get('episode_file') or item.get('release') or tr('Release desconhecida')
             released = item.get('release') or ''
             watched = self.history_timestamp(item.get('watched_at', ''))
             details = '   ·   '.join(value for value in (episode, item.get('size', ''), watched) if value)
