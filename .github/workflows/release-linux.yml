@@ -1,29 +1,117 @@
-name: Linux release
+name: Build and release Linux app
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  version:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        run: |
+          tag="v$(bash scripts/next-version.sh)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Run offline tests
-        run: python -m unittest discover -s tests -v
-      - name: Build Linux source bundle
+      - name: Install GTK build dependencies
         run: |
-          mkdir -p dist
-          git archive --format=tar --prefix=anime-nyaa/ HEAD | gzip -n > "dist/anime-nyaa-linux-${GITHUB_REF_NAME}.tar.gz"
-          sha256sum "dist/anime-nyaa-linux-${GITHUB_REF_NAME}.tar.gz" > "dist/anime-nyaa-linux-${GITHUB_REF_NAME}.sha256"
-      - name: Publish GitHub release
+          sudo apt-get update
+          sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv xvfb xauth dbus-x11
+      - name: Run offline tests
+        run: /usr/bin/python3 -m unittest discover -s tests -v
+      - name: Build executable bundle
+        run: |
+          /usr/bin/python3 -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install -r requirements-build.txt
+          .venv/bin/python -m PyInstaller --noconfirm --clean anime-nyaa.spec
+          # GTK/PyGObject must use the host's coherent GLib/GTK runtime.
+          find dist/anime-nyaa \( -name 'libglib-2.0.so*' -o -name 'libgobject-2.0.so*' -o -name 'libgio-2.0.so*' -o -name 'libgmodule-2.0.so*' -o -name 'libgirepository-*.so*' \) -delete
+          rm -rf dist/anime-nyaa/_internal/gio_modules dist/anime-nyaa/gio_modules
+          rm -rf dist/anime-nyaa/_internal/share/glib-2.0/schemas
+          # Avoid packaging the build host's complete icon theme (hundreds of MB).
+          rm -rf dist/anime-nyaa/_internal/share/icons
+          mkdir -p dist/anime-nyaa
+          cp packaging/linux/anime-nyaa.desktop dist/anime-nyaa/
+          cat > dist/anime-nyaa/README.txt <<'EOF'
+          Anime Nyaa executable bundle
+
+          Run ./anime-nyaa to start the application.
+          System requirements: Linux x86_64, GTK 4, Libadwaita, mpv,
+          Node.js and WebTorrent CLI.
+          EOF
+      - name: Smoke test packaged GTK app
+        run: GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test
+      - name: Archive executable bundle
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: tar -czf "dist/anime-nyaa-linux-x86_64-${RELEASE_TAG}.tar.gz" -C dist anime-nyaa
+      - name: Create source archive
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: git archive --format=tar --prefix=anime-nyaa/ HEAD | gzip -n > "dist/anime-nyaa-source-${RELEASE_TAG}.tar.gz"
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum anime-nyaa-*.tar.gz > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anime-nyaa-release-assets
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: anime-nyaa-release-assets
+          path: release-assets
+      - name: Create version tag for main push
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Anime Nyaa $GITHUB_REF_NAME" --generate-notes
-
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists; refusing to move it."
+            exit 1
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${RELEASE_TAG}" -f sha="${RELEASE_SHA}"
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Anime Nyaa $RELEASE_TAG" \
+            --generate-notes

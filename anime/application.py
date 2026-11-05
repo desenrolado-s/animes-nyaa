@@ -110,12 +110,12 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, hexpand=True, vexpand=True)
         content.append(self.stack)
         workspace.set_end_child(content)
-        workspace.connect('notify::position', self.clamp_sidebar_width)
-        workspace.set_position(250)
-        self.sidebar_paned = workspace
         self.sidebar_position = 250
         self.sidebar_animating = False
         self.sidebar_animation_source = 0
+        workspace.connect('notify::position', self.clamp_sidebar_width)
+        workspace.set_position(250)
+        self.sidebar_paned = workspace
 
         self.main_overlay = Gtk.Overlay()
         self.main_overlay.set_child(workspace)
