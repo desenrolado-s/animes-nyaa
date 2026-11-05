@@ -11,6 +11,7 @@ from gi.repository import Gdk, GLib, Gtk, Pango
 
 from ..services import anilist
 from .common import IMAGE_POOL
+from .i18n import tr
 
 
 class CatalogUI:
@@ -115,18 +116,18 @@ class CatalogUI:
         self.more_loading.set_visible(False)
         if error:
             self.more_button.set_visible(self.catalog_has_next and not reset)
-            self.show_notice(f'Falha ao consultar AniList: {error}')
+            self.show_notice(tr(f'Falha ao consultar AniList: {error}'))
             return False
         self.catalog_page = page
         self.catalog_has_next = bool(info.get('hasNextPage'))
         self.more_button.set_visible(self.catalog_has_next)
         if reset and not query:
-            self.catalog_heading.set_text('Em alta no AniList')
+            self.catalog_heading.set_text(tr('Em alta no AniList'))
         elif reset:
-            self.catalog_heading.set_text(f'Resultados para “{query}”')
+            self.catalog_heading.set_text(tr(f'Resultados para “{query}”'))
         for media in rows:
             self.add_media_card(media)
-        self.show_notice(f'{len(rows)} animes encontrados no AniList.' if rows else 'Nenhum anime encontrado no AniList.')
+        self.show_notice(tr(f'{len(rows)} animes encontrados no AniList.') if rows else 'Nenhum anime encontrado no AniList.')
         return False
 
     def add_media_card(self, media):

@@ -16,6 +16,7 @@ from gi.repository import Adw, GLib, Gtk
 from ..services import anilist, lastfm, nyaa, torrent
 from ..storage import history, lastfm_progress, library, settings, watch_progress
 from .common import CATEGORY_CODES
+from .i18n import tr
 
 
 class ResultsUI:
@@ -37,7 +38,7 @@ class ResultsUI:
         search_label = self.label('Consulta enviada ao Nyaa', 'caption-heading')
         search_card.append(search_label)
         query_row = Gtk.Box(spacing=8)
-        self.release_query = Gtk.Entry(placeholder_text='Termos usados na pesquisa', hexpand=True)
+        self.release_query = Gtk.Entry(placeholder_text=tr('Termos usados na pesquisa'), hexpand=True)
         self.release_query.set_activates_default(True)
         self.release_query.connect('activate', lambda *_: self.search_edited_releases())
         query_row.append(self.release_query)
@@ -48,8 +49,8 @@ class ResultsUI:
         search_card.append(self.search_trace)
 
         self.extra_pattern_revealer = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
-        self.extra_pattern = Gtk.Entry(placeholder_text='Ex.: 1080p, [Grupo], dual audio', hexpand=True)
-        self.extra_pattern.set_tooltip_text('Este termo será acrescentado à consulta principal.')
+        self.extra_pattern = Gtk.Entry(placeholder_text='E.g. 1080p, [Group], dual audio', hexpand=True)
+        self.extra_pattern.set_tooltip_text(tr('Este termo será acrescentado à consulta principal.'))
         self.extra_pattern_revealer.set_child(self.extra_pattern)
         search_card.append(self.extra_pattern_revealer)
         pattern_actions = Gtk.Box(spacing=8)
@@ -64,8 +65,8 @@ class ResultsUI:
         self.release_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.release_list.add_css_class('boxed-list')
         self.release_list.set_placeholder(Adw.StatusPage(
-            icon_name='system-search-symbolic', title='Nenhuma release encontrada',
-            description='Altere os termos da consulta e tente novamente.',
+            icon_name='system-search-symbolic', title=tr('Nenhuma release encontrada'),
+            description=tr('Altere os termos da consulta e tente novamente.'),
         ))
         scroller = Gtk.ScrolledWindow(vexpand=True)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -82,7 +83,7 @@ class ResultsUI:
     def toggle_extra_pattern(self):
         visible = not self.extra_pattern_revealer.get_reveal_child()
         self.extra_pattern_revealer.set_reveal_child(visible)
-        self.extra_pattern_button.set_label('− Remover padrão adicional' if visible else '＋ Adicionar padrão de pesquisa')
+        self.extra_pattern_button.set_label(tr('− Remover padrão adicional') if visible else tr('＋ Adicionar padrão de pesquisa'))
         if visible:
             self.extra_pattern.grab_focus()
 
@@ -106,11 +107,11 @@ class ResultsUI:
         self.render_batch_rows()
         count = len(self.batch_results)
         self.batch_search_trace.set_text(
-            f'{count} batches favoritos salvos. Clique em “Buscar batches” para atualizar.'
-            if count else 'Seus batches favoritos aparecerão aqui, mesmo antes de pesquisar.'
+            tr(f'{count} batches favoritos salvos. Clique em “Buscar batches” para atualizar.')
+            if count else tr('Seus batches favoritos aparecerão aqui, mesmo antes de pesquisar.')
         )
-        self.show_notice(f'{count} batches favoritos salvos para este anime.' if count else
-                    'Você pode buscar batches ou favoritar um para encontrá-lo aqui depois.')
+        self.show_notice(tr(f'{count} batches favoritos salvos para este anime.') if count else
+                    tr('Você pode buscar batches ou favoritar um para encontrá-lo aqui depois.'))
 
     def search_releases(self, query, mode='episode', episode=None, edited=False):
         if self.busy:
@@ -129,10 +130,10 @@ class ResultsUI:
         editable_query = query if edited else (base_query_sets[0][0] if base_query_sets and base_query_sets[0] else query)
         if mode == 'batch':
             self.batch_search_query.set_text(editable_query)
-            self.batch_search_trace.set_text('Consultas: ' + '  ·  '.join(display_queries))
+            self.batch_search_trace.set_text(tr('Consultas: ') + '  ·  '.join(display_queries))
         else:
             self.release_query.set_text(editable_query)
-            self.search_trace.set_text('Consultas: ' + '  ·  '.join(display_queries))
+            self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(display_queries))
         self.active_search_query = display_queries[0] if display_queries else query
 
         def worker():
@@ -192,22 +193,22 @@ class ResultsUI:
     def finish_batches(self, rows, error, query='', searched=None):
         self.busy = False
         if error:
-            self.show_notice(f'Falha ao consultar batches no Nyaa: {error}')
+            self.show_notice(tr(f'Falha ao consultar batches no Nyaa: {error}'))
             return False
         favorites = library.favorite_batches(self.current_anime)
         seen = {item.get('magnet') for item in favorites}
         merged = favorites + [item for item in rows if item.get('magnet') not in seen]
         self.batch_results = self.sort_batches_by_favorite(merged)
         if searched is not None:
-            self.batch_search_trace.set_text('Consultas: ' + '  ·  '.join(searched))
+            self.batch_search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
         self.render_batch_rows()
         saved_count = len(favorites)
         if rows:
-            self.show_notice(f'{len(rows)} batches encontrados; {saved_count} favoritos mantidos no topo.' if saved_count
-                        else f'{len(rows)} batches encontrados.')
+            self.show_notice(tr(f'{len(rows)} batches encontrados; {saved_count} favoritos mantidos no topo.') if saved_count
+                        else tr(f'{len(rows)} batches encontrados.'))
         else:
-            self.show_notice(f'Nenhum batch novo encontrado; {saved_count} favoritos continuam disponíveis.'
-                        if saved_count else 'Nenhum batch encontrado. Tente outra categoria.')
+            self.show_notice(tr(f'Nenhum batch novo encontrado; {saved_count} favoritos continuam disponíveis.')
+                        if saved_count else tr('Nenhum batch encontrado. Tente outra categoria.'))
         return False
 
     def sort_batches_by_favorite(self, rows):
@@ -218,14 +219,14 @@ class ResultsUI:
         for item in self.batch_results:
             item['is_batch'] = True
             row = Adw.ActionRow(
-                title=item['title'] or 'Batch sem título',
+                title=item['title'] or tr('Batch sem título'),
                 subtitle=f"{item['size']}   ·   ↑ {item['seeders']}   ·   ↓ {item['leechers']}   ·   {item['downloads']} downloads",
             )
             row.add_prefix(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
             favorite = library.is_favorite_batch(self.current_anime, item)
             favorite_button = Gtk.Button.new_from_icon_name('starred-symbolic' if favorite else 'non-starred-symbolic')
             favorite_button.add_css_class('flat')
-            favorite_button.set_tooltip_text('Remover dos batches favoritos' if favorite else 'Favoritar batch')
+            favorite_button.set_tooltip_text(tr('Remover dos batches favoritos') if favorite else tr('Favoritar batch'))
             favorite_button.connect('clicked', lambda *_args, selected=item: self.toggle_batch_favorite(selected))
             row.add_suffix(favorite_button)
             row.add_suffix(self.button('Ver episódios', lambda selected=item: self.load_batch_episodes(selected)))
@@ -239,14 +240,14 @@ class ResultsUI:
     def finish_releases(self, rows, error, query='', searched=None):
         self.busy = False
         if error:
-            self.show_notice(f'Falha ao consultar Nyaa: {error}')
+            self.show_notice(tr(f'Falha ao consultar Nyaa: {error}'))
             return False
         self.results = rows
         if searched is not None:
-            self.search_trace.set_text('Consultas: ' + '  ·  '.join(searched))
-        self.results_count.set_text(f'{len(rows)} releases encontradas')
+            self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
+        self.results_count.set_text(tr(f'{len(rows)} releases encontradas'))
         for item in rows:
-            title = item['title'] or 'Release sem título'
+            title = item['title'] or tr('Release sem título')
             meta = f"{item['size']}   ·   {item['downloads']} downloads"
             row = Adw.ActionRow(title=title, subtitle=meta)
             seeders = Gtk.Label(label=f"↑ {item['seeders']}")
@@ -259,7 +260,7 @@ class ResultsUI:
             row.add_suffix(leechers)
             play = Gtk.Button.new_from_icon_name('media-playback-start-symbolic')
             play.add_css_class('suggested-action')
-            play.set_tooltip_text('Reproduzir esta release')
+            play.set_tooltip_text(tr('Reproduzir esta release'))
             play.connect('clicked', lambda *_args, selected=item: self.play_item(selected))
             row.add_suffix(play)
             list_row = Gtk.ListBoxRow(child=row)
@@ -267,9 +268,9 @@ class ResultsUI:
             list_row.connect('activate', lambda selected: self.release_list.select_row(selected))
             self.release_list.append(list_row)
         if rows:
-            self.show_notice(f'{len(rows)} releases encontradas para o episódio {self.active_episode:02d}.')
+            self.show_notice(tr(f'{len(rows)} releases encontradas para o episódio {self.active_episode:02d}.'))
         elif self.active_episode:
-            self.show_notice(f'Nenhuma release individual encontrada para o episódio {self.active_episode:02d}. Confira a aba Batches.')
+            self.show_notice(tr(f'Nenhuma release individual encontrada para o episódio {self.active_episode:02d}. Confira a aba Batches.'))
         else:
             self.show_notice('Nenhum torrent encontrado para esta busca.')
         return False
@@ -303,7 +304,7 @@ class ResultsUI:
             self.show_notice(str(error))
             return False
         self.selected_batch = item
-        self.batch_episode_heading.set_text(item.get('title', 'Episódios do batch'))
+        self.batch_episode_heading.set_text(item.get('title', tr('Episódios do batch')))
         self.clear_list(self.batch_episode_list)
         self.batch_episode_rows = []
         self.batch_watched_badges = {}
@@ -317,12 +318,12 @@ class ResultsUI:
             row.add_prefix(badge)
             play = Gtk.Button.new_from_icon_name('media-playback-start-symbolic')
             play.add_css_class('flat')
-            play.set_tooltip_text(f'Assistir episódio {number:02d}')
+            play.set_tooltip_text(tr(f'Assistir episódio {number:02d}'))
             play.connect('clicked', lambda *_args, selected=file: self.play_batch_episode(selected))
             row.add_suffix(play)
             watched_badge = Gtk.Label(label='✓')
             watched_badge.add_css_class('success')
-            watched_badge.set_tooltip_text('Assistido')
+            watched_badge.set_tooltip_text(tr('Assistido'))
             watched_badge.set_visible(False)
             row.add_suffix(watched_badge)
             row.set_activatable(True)
@@ -330,11 +331,11 @@ class ResultsUI:
             self.batch_episode_list.append(row)
             self.batch_episode_rows.append((number, file['name'].lower(), row, file))
             self.batch_watched_badges.setdefault(number, []).append(watched_badge)
-        self.batch_episode_count.set_text(f'{len(files)} episódios')
+        self.batch_episode_count.set_text(tr(f'{len(files)} episódios'))
         self.batch_episode_search.set_text('')
         self.batch_view.set_visible_child_name('episodes')
         self.refresh_watched_episodes()
-        self.show_notice(f'{len(files)} episódios encontrados dentro do batch.')
+        self.show_notice(tr(f'{len(files)} episódios encontrados dentro do batch.'))
         return False
 
     def filter_batch_episodes(self, *_args):
@@ -371,7 +372,7 @@ class ResultsUI:
         except (OSError, KeyError, ValueError) as exc:
             if playback_directory is not None:
                 shutil.rmtree(playback_directory, ignore_errors=True)
-            self.show_notice(f'Não foi possível iniciar a reprodução: {exc}')
+            self.show_notice(tr(f'Não foi possível iniciar a reprodução: {exc}'))
             return
         if episode_number is None:
             episode_number = item.get('episode_number')
@@ -384,12 +385,12 @@ class ResultsUI:
         try:
             watch_progress.mark_watched(anime_id, episode_number)
         except Exception as exc:
-            self.show_notice(f'A reprodução iniciou, mas não foi possível salvar o progresso: {exc}')
+            self.show_notice(tr(f'A reprodução iniciou, mas não foi possível salvar o progresso: {exc}'))
         try:
             history.record(item, anime, file_index=file_index, file_name=file_name,
                            episode_number=episode_number)
         except Exception as exc:
-            self.show_notice(f'A reprodução iniciou, mas não foi possível salvar no histórico: {exc}')
+            self.show_notice(tr(f'A reprodução iniciou, mas não foi possível salvar no histórico: {exc}'))
         if anime_id and (self.current_anime or {}).get('id') == anime_id:
             self.refresh_watched_episodes()
         credentials = settings.lastfm_credentials()
@@ -404,7 +405,7 @@ class ResultsUI:
             target=self.monitor_playback,
             args=(process, file_name or item['title'], playback_directory), daemon=True,
         ).start()
-        self.show_notice(f'Abrindo no mpv: {file_name or item["title"]}')
+        self.show_notice(tr(f'Abrindo no mpv: {file_name or item["title"]}'))
 
     def scrobble_episode_themes(self, anime_id, episode_number, anime_title, credentials, timestamp):
         try:
@@ -412,7 +413,7 @@ class ResultsUI:
             if not tracks:
                 lastfm_progress.release(anime_id, episode_number)
                 GLib.idle_add(self.show_notice,
-                              f'Não encontrei abertura e encerramento para {anime_title}.')
+                              tr(f'Não encontrei abertura e encerramento para {anime_title}.'))
                 return
             accepted = lastfm.scrobble(
                 credentials['api_key'], credentials['api_secret'],
@@ -420,18 +421,18 @@ class ResultsUI:
             )
             lastfm_progress.mark_submitted(anime_id, episode_number)
             GLib.idle_add(self.show_notice,
-                          f'{accepted} tema(s) de {anime_title} enviados ao Last.fm.')
+                          tr(f'{accepted} tema(s) de {anime_title} enviados ao Last.fm.'))
         except Exception as exc:
             lastfm_progress.release(anime_id, episode_number)
-            GLib.idle_add(self.show_notice, f'Falha ao enviar os temas ao Last.fm: {exc}')
+            GLib.idle_add(self.show_notice, tr(f'Falha ao enviar os temas ao Last.fm: {exc}'))
 
     def monitor_playback(self, process, title, playback_directory=None):
         try:
             output, _ = process.communicate()
             if process.returncode:
                 details = (output or '').strip().splitlines()
-                reason = '\n'.join(details[-4:])[-500:] if details else f'WebTorrent encerrou com código {process.returncode}.'
-                GLib.idle_add(self.show_notice, f'Falha ao reproduzir {title}: {reason}')
+                reason = '\n'.join(details[-4:])[-500:] if details else tr(f'WebTorrent encerrou com código {process.returncode}.')
+                GLib.idle_add(self.show_notice, tr(f'Falha ao reproduzir {title}: {reason}'))
         finally:
             if playback_directory is not None:
                 shutil.rmtree(playback_directory, ignore_errors=True)

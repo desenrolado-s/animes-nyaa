@@ -10,6 +10,7 @@ from gi.repository import Adw, Gio, GLib, Gtk
 
 from .services import lastfm
 from .storage import settings
+from .ui.i18n import tr
 from .ui.catalog_ui import CatalogUI
 from .ui.common import CommonUI
 from .ui.detail_ui import DetailUI
@@ -40,14 +41,14 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
-        self.query = Gtk.SearchEntry(placeholder_text='Buscar anime', width_chars=24)
+        self.query = Gtk.SearchEntry(placeholder_text=tr('Buscar anime'), width_chars=24)
         self.query.set_max_width_chars(32)
         self.query.set_search_delay(350)
         self.query.connect('activate', lambda *_: self.search_catalog())
         self.query.connect('search-changed', self.catalog_search_changed)
         header.set_title_widget(self.query)
         settings_button = Gtk.Button.new_from_icon_name('emblem-system-symbolic')
-        settings_button.set_tooltip_text('Configurações')
+        settings_button.set_tooltip_text(tr('Configurações'))
         settings_button.connect('clicked', lambda *_: self.show_settings())
         header.pack_end(settings_button)
         self.sidebar_revealer = Gtk.Revealer(
@@ -57,7 +58,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.sidebar_toggle = Gtk.ToggleButton()
         self.sidebar_toggle.set_child(Gtk.Image.new_from_icon_name('sidebar-show-symbolic'))
         self.sidebar_toggle.set_active(True)
-        self.sidebar_toggle.set_tooltip_text('Mostrar ou ocultar a barra lateral')
+        self.sidebar_toggle.set_tooltip_text(tr('Mostrar ou ocultar a barra lateral'))
         self.sidebar_toggle.connect('toggled', self.toggle_sidebar)
         header.pack_start(self.sidebar_toggle)
         toolbar.add_top_bar(header)
@@ -89,8 +90,8 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         category_title.set_margin_top(18)
         sidebar.append(category_title)
         self.category = Gtk.DropDown(model=Gtk.StringList.new([
-            'Todas as categorias', 'Legendados em inglês',
-            'Legendados em outros idiomas', 'Sem legendas',
+            tr('Todas as categorias'), tr('Legendados em inglês'),
+            tr('Legendados em outros idiomas'), tr('Sem legendas'),
         ]))
         self.category.set_hexpand(True)
         self.category.connect('notify::selected', self.category_changed)
@@ -141,7 +142,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         notice_content.append(self.notification_label)
         dismiss = Gtk.Button.new_from_icon_name('window-close-symbolic')
         dismiss.add_css_class('flat')
-        dismiss.set_tooltip_text('Fechar aviso')
+        dismiss.set_tooltip_text(tr('Fechar aviso'))
         dismiss.connect('clicked', lambda *_: self.dismiss_notification())
         notice_content.append(dismiss)
         notice.append(notice_content)
@@ -171,19 +172,31 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         return button
 
     def show_settings(self):
-        window = Adw.PreferencesWindow(transient_for=self.window, modal=True, title='Configurações')
+        window = Adw.PreferencesWindow(transient_for=self.window, modal=True, title=tr('Configurações'))
         window.set_default_size(700, 620)
-        page = Adw.PreferencesPage(title='Geral', icon_name='preferences-system-symbolic')
-        group = Adw.PreferencesGroup(
-            title='Downloads temporários',
-            description='Escolha onde o WebTorrent armazena os dados enquanto reproduz vídeos.',
+        page = Adw.PreferencesPage(title=tr('Geral'), icon_name='preferences-system-symbolic')
+        language_group = Adw.PreferencesGroup(title=tr('Idioma'))
+        language_row = Adw.ActionRow(title=tr('Idioma do aplicativo'),
+                                     subtitle=tr('A interface é atualizada imediatamente.'))
+        self.language_dropdown = Gtk.DropDown(
+            model=Gtk.StringList.new([tr('English'), tr('Português')]),
+            selected=0 if settings.language() == 'en' else 1,
+            valign=Gtk.Align.CENTER,
         )
-        row = Adw.ActionRow(title='Pasta dos vídeos temporários')
+        self.language_dropdown.connect('notify::selected', self.language_changed)
+        language_row.add_suffix(self.language_dropdown)
+        language_group.add(language_row)
+        page.add(language_group)
+        group = Adw.PreferencesGroup(
+            title=tr('Downloads temporários'),
+            description=tr('Escolha onde o WebTorrent armazena os dados enquanto reproduz vídeos.'),
+        )
+        row = Adw.ActionRow(title=tr('Pasta dos vídeos temporários'))
         row.set_subtitle(str(settings.temporary_directory()))
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, valign=Gtk.Align.CENTER)
-        choose = Gtk.Button(label='Escolher pasta')
+        choose = Gtk.Button(label=tr('Escolher pasta'))
         choose.connect('clicked', lambda *_: self.choose_temporary_directory(window, row))
-        reset = Gtk.Button(label='Usar /tmp')
+        reset = Gtk.Button(label=tr('Usar /tmp'))
         reset.connect('clicked', lambda *_: self.reset_temporary_directory(row))
         actions.append(choose)
         actions.append(reset)
@@ -193,59 +206,86 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
 
         lastfm_group = Adw.PreferencesGroup(
             title='Last.fm',
-            description='Envie a abertura e o encerramento de cada episódio na primeira reprodução.',
+            description=tr('Envie a abertura e o encerramento de cada episódio na primeira reprodução.'),
         )
         credentials = settings.lastfm_credentials()
-        self.lastfm_api_key_entry = Gtk.Entry(placeholder_text='Chave de API do Last.fm',
+        self.lastfm_api_key_entry = Gtk.Entry(placeholder_text=tr('Chave de API do Last.fm'),
                                                text=credentials['api_key'], hexpand=True)
-        api_key_row = Adw.ActionRow(title='Chave de API')
+        api_key_row = Adw.ActionRow(title=tr('Chave de API'))
         api_key_row.add_suffix(self.lastfm_api_key_entry)
         lastfm_group.add(api_key_row)
-        self.lastfm_api_secret_entry = Gtk.PasswordEntry(placeholder_text='Segredo da API', hexpand=True)
+        self.lastfm_api_secret_entry = Gtk.PasswordEntry(placeholder_text=tr('Segredo da API'), hexpand=True)
         self.lastfm_api_secret_entry.set_text(credentials['api_secret'])
         self.lastfm_api_secret_entry.set_show_peek_icon(True)
-        secret_row = Adw.ActionRow(title='Segredo da API')
+        secret_row = Adw.ActionRow(title=tr('Segredo da API'))
         secret_row.add_suffix(self.lastfm_api_secret_entry)
         lastfm_group.add(secret_row)
 
         self.lastfm_enabled_switch = Gtk.Switch(active=credentials['enabled'], valign=Gtk.Align.CENTER)
         self.lastfm_enabled_switch.connect('notify::active', self.lastfm_enabled_changed)
-        enabled_row = Adw.ActionRow(title='Enviar temas ao Last.fm',
-                                    subtitle='Cada episódio é enviado uma única vez.')
+        enabled_row = Adw.ActionRow(title=tr('Enviar temas ao Last.fm'),
+                                    subtitle=tr('Cada episódio é enviado uma única vez.'))
         enabled_row.add_suffix(self.lastfm_enabled_switch)
         enabled_row.set_activatable_widget(self.lastfm_enabled_switch)
         lastfm_group.add(enabled_row)
 
-        actions_row = Adw.ActionRow(title='Conectar conta')
+        actions_row = Adw.ActionRow(title=tr('Conectar conta'))
         self.lastfm_status = Gtk.Label(xalign=1, wrap=True,
                                       label=self.lastfm_status_text(credentials))
         self.lastfm_status.set_max_width_chars(30)
         actions_row.add_suffix(self.lastfm_status)
-        self.lastfm_connect_button = Gtk.Button(label='Autorizar')
+        self.lastfm_connect_button = Gtk.Button(label=tr('Autorizar'))
         self.lastfm_connect_button.connect('clicked', self.start_lastfm_authorization)
         actions_row.add_suffix(self.lastfm_connect_button)
-        self.lastfm_finish_button = Gtk.Button(label='Concluir conexão')
+        self.lastfm_finish_button = Gtk.Button(label=tr('Concluir conexão'))
         self.lastfm_finish_button.set_visible(bool(credentials['pending_token']))
         self.lastfm_finish_button.connect('clicked', self.finish_lastfm_authorization)
         actions_row.add_suffix(self.lastfm_finish_button)
         lastfm_group.add(actions_row)
 
-        info_row = Adw.ActionRow(title='Credenciais do aplicativo',
-                                 subtitle='Crie uma chave em last.fm/api/account/create. Os dados ficam neste computador.')
-        api_link = Gtk.LinkButton(uri='https://www.last.fm/api/account/create', label='Obter chave')
+        info_row = Adw.ActionRow(title=tr('Credenciais do aplicativo'),
+                                 subtitle=tr('Crie uma chave em last.fm/api/account/create. Os dados ficam neste computador.'))
+        api_link = Gtk.LinkButton(uri='https://www.last.fm/api/account/create', label=tr('Obter chave'))
         info_row.add_suffix(api_link)
         lastfm_group.add(info_row)
         page.add(lastfm_group)
         window.add(page)
+        self.settings_window = window
         window.present()
+
+    def language_changed(self, dropdown, _pspec):
+        selected_language = 'en' if dropdown.get_selected() == 0 else 'pt'
+        if selected_language == settings.language():
+            return
+        settings.set_language(selected_language)
+        active_page = self.stack.get_visible_child_name()
+        current_anime = self.current_anime
+        settings_window = getattr(self, 'settings_window', None)
+        if settings_window:
+            settings_window.close()
+        self.window.close()
+        self.window = None
+        self.do_activate()
+
+        def restore_page():
+            if current_anime:
+                self.open_anime(current_anime)
+            elif active_page == 'my-list':
+                self.show_my_list()
+            elif active_page == 'history':
+                self.show_history()
+            return False
+
+        GLib.idle_add(restore_page)
+
 
     @staticmethod
     def lastfm_status_text(credentials):
         if credentials['username']:
-            return f"Conectado como {credentials['username']}"
+            return tr(f"Conectado como {credentials['username']}")
         if credentials['pending_token']:
-            return 'Autorize no navegador e conclua a conexão.'
-        return 'Conta não conectada'
+            return tr('Autorize no navegador e conclua a conexão.')
+        return tr('Conta não conectada')
 
     def save_lastfm_settings(self):
         api_key = self.lastfm_api_key_entry.get_text().strip()
@@ -264,21 +304,21 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         try:
             self.save_lastfm_settings()
         except OSError as error:
-            self.show_notice(f'Não foi possível salvar a configuração do Last.fm: {error}')
+            self.show_notice(tr(f'Não foi possível salvar a configuração do Last.fm: {error}'))
 
     def start_lastfm_authorization(self, *_args):
         api_key = self.lastfm_api_key_entry.get_text().strip()
         api_secret = self.lastfm_api_secret_entry.get_text().strip()
         if not api_key or not api_secret:
-            self.lastfm_status.set_text('Informe a chave e o segredo da API.')
+            self.lastfm_status.set_text(tr('Informe a chave e o segredo da API.'))
             return
         try:
             self.save_lastfm_settings()
         except OSError as error:
-            self.lastfm_status.set_text(f'Falha ao salvar: {error}')
+            self.lastfm_status.set_text(tr(f'Falha ao salvar: {error}'))
             return
         self.lastfm_connect_button.set_sensitive(False)
-        self.lastfm_status.set_text('Solicitando autorização…')
+        self.lastfm_status.set_text(tr('Solicitando autorização…'))
 
         def worker():
             try:
@@ -295,10 +335,10 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
                 api_key, self.lastfm_api_secret_entry.get_text().strip(), pending_token=token,
             )
             webbrowser.open(lastfm.authorization_url(api_key, token))
-            self.lastfm_status.set_text('Autorize Anime Nyaa no navegador e clique em “Concluir conexão”.')
+            self.lastfm_status.set_text(tr('Autorize Anime Nyaa no navegador e clique em “Concluir conexão”.'))
             self.lastfm_finish_button.set_visible(True)
         except Exception as error:
-            self.lastfm_status.set_text(f'Não foi possível abrir a autorização: {error}')
+            self.lastfm_status.set_text(tr(f'Não foi possível abrir a autorização: {error}'))
         self.lastfm_connect_button.set_sensitive(True)
         return False
 
@@ -310,10 +350,10 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
     def finish_lastfm_authorization(self, *_args):
         credentials = settings.lastfm_credentials()
         if not credentials['pending_token']:
-            self.lastfm_status.set_text('Clique em “Autorizar” e aprove o acesso no navegador primeiro.')
+            self.lastfm_status.set_text(tr('Clique em “Autorizar” e aprove o acesso no navegador primeiro.'))
             return
         self.lastfm_finish_button.set_sensitive(False)
-        self.lastfm_status.set_text('Concluindo conexão…')
+        self.lastfm_status.set_text(tr('Concluindo conexão…'))
 
         def worker():
             try:
@@ -332,15 +372,15 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         threading.Thread(target=worker, daemon=True).start()
 
     def lastfm_connection_succeeded(self, username):
-        self.lastfm_status.set_text(f'Conectado como {username}')
+        self.lastfm_status.set_text(tr(f'Conectado como {username}'))
         self.lastfm_finish_button.set_visible(False)
         self.lastfm_finish_button.set_sensitive(True)
         return False
 
     def choose_temporary_directory(self, parent, row):
         chooser = Gtk.FileChooserNative.new(
-            'Escolher pasta para vídeos temporários', parent,
-            Gtk.FileChooserAction.SELECT_FOLDER, 'Selecionar', 'Cancelar',
+            tr('Escolher pasta para vídeos temporários'), parent,
+            Gtk.FileChooserAction.SELECT_FOLDER, tr('Selecionar'), tr('Cancelar'),
         )
         current = settings.temporary_directory()
         if current.is_dir():
@@ -358,7 +398,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
                     settings.set_temporary_directory(path)
                     row.set_subtitle(str(settings.temporary_directory()))
                 except OSError as error:
-                    self.show_notice(f'Não foi possível salvar a pasta: {error}')
+                    self.show_notice(tr(f'Não foi possível salvar a pasta: {error}'))
         chooser.destroy()
         self.folder_chooser = None
 
@@ -367,7 +407,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
             settings.set_temporary_directory(None)
             row.set_subtitle(str(settings.temporary_directory()))
         except OSError as error:
-            self.show_notice(f'Não foi possível restaurar /tmp: {error}')
+            self.show_notice(tr(f'Não foi possível restaurar /tmp: {error}'))
 
     def toggle_sidebar(self, button):
         if button.get_active():

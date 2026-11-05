@@ -7,6 +7,7 @@ from gi.repository import Adw, Gdk, GLib, Gtk
 
 from ..services import anilist
 from ..storage import library
+from .i18n import tr
 from .common import IMAGE_POOL
 
 
@@ -24,8 +25,8 @@ class LibraryUI:
         self.my_list_rows.add_css_class('boxed-list')
         self.my_list_rows.set_vexpand(True)
         self.my_list_rows.set_placeholder(Adw.StatusPage(
-            icon_name='starred-symbolic', title='Sua lista está vazia',
-            description='Abra um anime e use “Minha lista” para guardá-lo aqui.',
+            icon_name='starred-symbolic', title=tr('Sua lista está vazia'),
+            description=tr('Abra um anime e use “Minha lista” para guardá-lo aqui.'),
         ))
         scroller = Gtk.ScrolledWindow(vexpand=True)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -36,18 +37,18 @@ class LibraryUI:
     def show_my_list(self):
         self.refresh_my_list()
         self.stack.set_visible_child_name('my-list')
-        self.show_notice(f'{len(library.load()["anime"])} animes na sua lista.')
+        self.show_notice(tr(f'{len(library.load()["anime"])} animes na sua lista.'))
 
     def refresh_my_list(self):
         self.clear_list(self.my_list_rows)
         entries = library.load()['anime']
-        self.my_list_count.set_text(f'{len(entries)} animes')
+        self.my_list_count.set_text(tr(f'{len(entries)} animes'))
         for media in entries:
             title = media.get('display_title') or anilist.display_title(media)
             subtitle = '   ·   '.join(value for value in (
                 (media.get('format') or '').replace('_', ' ').title(),
                 str(media.get('seasonYear') or ''),
-                f"{media.get('episodes')} episódios" if media.get('episodes') else '',
+                tr(f"{media.get('episodes')} episódios") if media.get('episodes') else '',
             ) if value)
             row = Adw.ActionRow(title=title, subtitle=subtitle)
             cover = Gtk.Picture()
@@ -88,7 +89,7 @@ class LibraryUI:
             return
         is_saved = library.toggle_anime(self.current_anime)
         self.update_my_list_button(is_saved)
-        self.show_notice('Anime adicionado à Minha lista.' if is_saved else 'Anime removido da Minha lista.')
+        self.show_notice(tr('Anime adicionado à Minha lista.') if is_saved else tr('Anime removido da Minha lista.'))
         if self.stack.get_visible_child_name() == 'my-list':
             self.refresh_my_list()
 
@@ -96,9 +97,9 @@ class LibraryUI:
         if not getattr(self, 'my_list_button', None) or not self.current_anime:
             return
         saved = library.contains_anime(self.current_anime) if is_saved is None else is_saved
-        self.my_list_button.set_label('✓ Na minha lista' if saved else '＋ Minha lista')
+        self.my_list_button.set_label(tr('✓ Na minha lista') if saved else tr('＋ Minha lista'))
         self.my_list_button.set_tooltip_text(
-            'Remover este anime da Minha lista' if saved else 'Adicionar este anime à Minha lista'
+            tr('Remover este anime da Minha lista') if saved else tr('Adicionar este anime à Minha lista')
         )
         if saved:
             self.my_list_button.add_css_class('suggested-action')
