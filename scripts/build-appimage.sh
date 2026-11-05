@@ -21,6 +21,11 @@ bash scripts/bundle-gtk-typelibs.sh "$appdir/usr/anime-nyaa/_internal/gi_typelib
 find "$appdir" \( -name 'libglib-2.0.so*' -o -name 'libgobject-2.0.so*' \
   -o -name 'libgio-2.0.so*' -o -name 'libgmodule-2.0.so*' \
   -o -name 'libgirepository-*.so*' \) -delete
+# GIO loads the host libmount at runtime. Keep its libmount, libblkid and
+# libsystemd dependency chain from one distro instead of mixing Ubuntu and
+# the target system's symbol versions.
+find "$appdir" \( -name 'libmount.so*' -o -name 'libblkid.so*' \
+  -o -name 'libsystemd.so*' \) -delete
 rm -rf "$appdir/usr/anime-nyaa/_internal/gio_modules" "$appdir/usr/anime-nyaa/gio_modules"
 rm -rf "$appdir/usr/anime-nyaa/_internal/share/glib-2.0/schemas"
 rm -rf "$appdir/usr/anime-nyaa/_internal/share/icons"

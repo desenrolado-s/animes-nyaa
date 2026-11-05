@@ -99,6 +99,10 @@ jobs:
           .venv/bin/python -m PyInstaller --noconfirm --clean anime-nyaa.spec
           # GTK/PyGObject must use the host's coherent GLib/GTK runtime.
           find dist/anime-nyaa \( -name 'libglib-2.0.so*' -o -name 'libgobject-2.0.so*' -o -name 'libgio-2.0.so*' -o -name 'libgmodule-2.0.so*' -o -name 'libgirepository-*.so*' \) -delete
+          # GIO loads the host libmount at runtime. Bundling Ubuntu's older
+          # libmount/blkid/systemd overrides the distro versions on Arch and
+          # openSUSE and can break GIO's required symbol versions.
+          find dist/anime-nyaa \( -name 'libmount.so*' -o -name 'libblkid.so*' -o -name 'libsystemd.so*' \) -delete
           rm -rf dist/anime-nyaa/_internal/gio_modules dist/anime-nyaa/gio_modules
           rm -rf dist/anime-nyaa/_internal/share/glib-2.0/schemas
           # Avoid packaging the build host's complete icon theme (hundreds of MB).
