@@ -12,7 +12,7 @@ gi.require_version('Pango', '1.0')
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
 from ..services import anilist, episode_titles
-from ..storage import library
+from ..storage import library, watch_progress
 from .common import IMAGE_POOL
 
 
@@ -236,6 +236,7 @@ class DetailUI:
         self.batch_search_trace.set_text('')
         self.batch_search_performed = False
         self.populate_episodes(count)
+        self.refresh_watched_episodes()
         self.fetch_episode_titles(media)
         self.stack.set_visible_child_name('anime')
         self.show_notice(f'{count} episódios no catálogo.' if count else
@@ -324,6 +325,7 @@ class DetailUI:
     def populate_episodes(self, count):
         self.clear_list(self.episode_list)
         self.episode_rows = []
+        self.episode_watched_badges = {}
         self.episode_search.set_visible(bool(count))
         self.episode_content.set_visible_child_name('list' if count else 'empty')
         for number in range(1, count + 1):
@@ -338,11 +340,26 @@ class DetailUI:
             search_button.set_tooltip_text(f'Pesquisar episódio {number:02d}')
             search_button.connect('clicked', lambda *_args, episode=number: self.search_episode(episode))
             row.add_suffix(search_button)
+            watched_badge = Gtk.Label(label='✓')
+            watched_badge.add_css_class('success')
+            watched_badge.set_tooltip_text('Assistido')
+            watched_badge.set_visible(False)
+            row.add_suffix(watched_badge)
             row.set_activatable(True)
             row.connect('activated', lambda *_args, episode=number: self.search_episode(episode))
             self.episode_list.append(row)
             self.episode_rows.append((number, row))
+            self.episode_watched_badges[number] = watched_badge
         self.episode_search.set_text('')
+
+    def refresh_watched_episodes(self):
+        anime_id = (self.current_anime or {}).get('id')
+        watched = watch_progress.watched_episodes(anime_id)
+        for number, badge in getattr(self, 'episode_watched_badges', {}).items():
+            badge.set_visible(number in watched)
+        for number, badges in getattr(self, 'batch_watched_badges', {}).items():
+            for badge in badges:
+                badge.set_visible(number in watched)
 
     def filter_episodes(self, *_args):
         query = self.episode_search.get_text().strip().lower()

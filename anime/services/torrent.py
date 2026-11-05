@@ -16,7 +16,7 @@ def list_video_files(magnet, timeout=120):
         raise RuntimeError('Instale webtorrent-cli para ver os episódios deste batch.')
     try:
         result = subprocess.run(
-            [executable, magnet, '--select', 'list', '--quiet'],
+            [executable, magnet, '--select', 'list', '--quiet', '--port', '0'],
             capture_output=True, text=True, timeout=timeout, check=False,
         )
     except subprocess.TimeoutExpired as error:

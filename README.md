@@ -25,11 +25,13 @@ npm install --global webtorrent-cli
 ./anime-nyaa
 ```
 
+As versões Linux publicadas oferecem um arquivo `.tar.gz` com o código e o lançador, além de um arquivo SHA-256 para conferência. Extraia o pacote e execute `./anime-nyaa`; as dependências de GTK 4, Libadwaita, Python, mpv e WebTorrent CLI listadas acima precisam estar instaladas no sistema.
+
 Use a barra lateral para navegar pelo catálogo, pela **Minha lista** e pelo **Histórico**, ou para escolher a categoria dos torrents. Na ficha do anime, **Minha lista** salva ou remove o anime da sua lista pessoal. Cada episódio procura no Nyaa tanto pelo número com zero à esquerda (por exemplo, `01`) quanto sem ele (`1`); a consulta usada pode ser conferida e editada nos resultados, com um padrão adicional opcional. Na aba **Batches**, escolha um torrent para carregar os arquivos de vídeo que ele contém; cada episódio pode ser aberto individualmente no mpv. Use a estrela em um batch para mantê-lo no topo dos resultados daquele anime.
 
-Abra **Configurações** no botão de engrenagem para escolher a pasta usada pelo WebTorrent durante a reprodução. Se nenhuma pasta for escolhida, os vídeos temporários são armazenados em `/tmp`.
+Abra **Configurações** no botão de engrenagem para escolher a pasta usada pelo WebTorrent durante a reprodução e configurar a integração com o Last.fm. Para conectar, crie uma chave de API em [last.fm/api/account/create](https://www.last.fm/api/account/create), informe a chave e o segredo nas configurações, clique em **Autorizar** e conclua a conexão depois de aprovar o acesso no navegador. Na primeira reprodução de cada episódio, o app consulta os temas no AnimeThemes e envia a abertura e o encerramento ao Last.fm. Se o envio falhar, uma reprodução posterior tentará novamente; depois que o Last.fm aceitar os temas, o app não os envia de novo. As preferências e credenciais ficam em `~/.local/share/anime-nyaa/settings.json`. Se nenhuma pasta temporária for escolhida, os vídeos ficam em `/tmp`. Os dados de cada sessão são removidos quando o WebTorrent encerra.
 
-O histórico fica em `~/.local/share/anime-nyaa/history.json` e pode ser reproduzido, removido por item ou limpo pela página **Histórico**. A lista pessoal e os batches favoritos ficam em `~/.local/share/anime-nyaa/library.json`.
+O histórico fica em `~/.local/share/anime-nyaa/history.json` e pode ser reproduzido, removido por item ou limpo pela página **Histórico**. Episódios iniciados para reprodução são marcados como assistidos, com o progresso salvo em `~/.local/share/anime-nyaa/watch-progress.json`. A lista pessoal e os batches favoritos ficam em `~/.local/share/anime-nyaa/library.json`.
 
 ## Adicionar ao menu de aplicativos
 

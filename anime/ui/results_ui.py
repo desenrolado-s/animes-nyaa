@@ -1,7 +1,9 @@
 """Nyaa result lists, batch file browsing and mpv playback."""
 import shutil
 import subprocess
+import tempfile
 import threading
+import time
 from pathlib import Path
 import urllib.parse
 import webbrowser
@@ -11,8 +13,8 @@ gi.require_version('Adw', '1')
 gi.require_version('Gtk', '4.0')
 from gi.repository import Adw, GLib, Gtk
 
-from ..services import anilist, nyaa, torrent
-from ..storage import history, library, settings
+from ..services import anilist, lastfm, nyaa, torrent
+from ..storage import history, lastfm_progress, library, settings, watch_progress
 from .common import CATEGORY_CODES
 
 
@@ -281,7 +283,8 @@ class ResultsUI:
 
     def load_batch_episodes(self, item):
         self.selected_batch = item
-        self.busy = True
+        self.batch_load_request = getattr(self, 'batch_load_request', 0) + 1
+        request_id = self.batch_load_request
         self.show_notice('Lendo episódios do batch…')
 
         def worker():
@@ -289,12 +292,13 @@ class ResultsUI:
                 files, error = torrent.list_video_files(item['magnet']), None
             except Exception as exc:
                 files, error = [], exc
-            GLib.idle_add(self.finish_batch_episodes, files, error, item)
+            GLib.idle_add(self.finish_batch_episodes, files, error, item, request_id)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def finish_batch_episodes(self, files, error, item):
-        self.busy = False
+    def finish_batch_episodes(self, files, error, item, request_id=None):
+        if request_id is not None and request_id != getattr(self, 'batch_load_request', request_id):
+            return False
         if error:
             self.show_notice(str(error))
             return False
@@ -302,6 +306,7 @@ class ResultsUI:
         self.batch_episode_heading.set_text(item.get('title', 'Episódios do batch'))
         self.clear_list(self.batch_episode_list)
         self.batch_episode_rows = []
+        self.batch_watched_badges = {}
         for position, file in enumerate(files, start=1):
             number = torrent.episode_number(file['name']) or position
             row = Adw.ActionRow(title=self.episode_row_title(number),
@@ -315,13 +320,20 @@ class ResultsUI:
             play.set_tooltip_text(f'Assistir episódio {number:02d}')
             play.connect('clicked', lambda *_args, selected=file: self.play_batch_episode(selected))
             row.add_suffix(play)
+            watched_badge = Gtk.Label(label='✓')
+            watched_badge.add_css_class('success')
+            watched_badge.set_tooltip_text('Assistido')
+            watched_badge.set_visible(False)
+            row.add_suffix(watched_badge)
             row.set_activatable(True)
             row.connect('activated', lambda *_args, selected=file: self.play_batch_episode(selected))
             self.batch_episode_list.append(row)
             self.batch_episode_rows.append((number, file['name'].lower(), row, file))
+            self.batch_watched_badges.setdefault(number, []).append(watched_badge)
         self.batch_episode_count.set_text(f'{len(files)} episódios')
         self.batch_episode_search.set_text('')
         self.batch_view.set_visible_child_name('episodes')
+        self.refresh_watched_episodes()
         self.show_notice(f'{len(files)} episódios encontrados dentro do batch.')
         return False
 
@@ -334,43 +346,95 @@ class ResultsUI:
         if getattr(self, 'selected_batch', None):
             self.play_item(self.selected_batch, file_index=file['index'], file_name=file['name'])
 
-    def play_item(self, item, use_current_anime=True, file_index=None, file_name=None):
+    def play_item(self, item, use_current_anime=True, file_index=None, file_name=None,
+                  episode_number=None):
         webtorrent = shutil.which('webtorrent')
+        node = shutil.which('node')
         mpv = shutil.which('mpv')
-        if not webtorrent or not mpv:
-            self.show_notice('Instale webtorrent-cli e mpv para reproduzir torrents.')
+        if not webtorrent or not node or not mpv:
+            self.show_notice('Instale Node.js, webtorrent-cli e mpv para reproduzir torrents.')
             return
+        playback_directory = None
         try:
-            command = [webtorrent, item['magnet'], '--mpv', '--quiet']
             temporary_directory = settings.temporary_directory()
             temporary_directory.mkdir(parents=True, exist_ok=True)
-            command.extend(['--out', str(temporary_directory)])
-            if file_index is not None:
-                command.extend(['--select', str(file_index)])
+            playback_directory = Path(tempfile.mkdtemp(prefix='anime-nyaa-', dir=temporary_directory))
+            helper = Path(__file__).resolve().parents[1] / 'services' / 'stream_episode.mjs'
+            command = [node, str(helper), webtorrent, item['magnet'],
+                       str(file_index) if file_index is not None else '-1',
+                       str(playback_directory), mpv]
             process = subprocess.Popen(
                 command, cwd=str(Path.home()), stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 start_new_session=True,
             )
         except (OSError, KeyError, ValueError) as exc:
+            if playback_directory is not None:
+                shutil.rmtree(playback_directory, ignore_errors=True)
             self.show_notice(f'Não foi possível iniciar a reprodução: {exc}')
             return
+        if episode_number is None:
+            episode_number = item.get('episode_number')
+        if episode_number is None and file_name:
+            episode_number = torrent.episode_number(file_name)
+        if episode_number is None and use_current_anime:
+            episode_number = getattr(self, 'active_episode', None)
+        anime = self.current_anime if use_current_anime else None
+        anime_id = (anime or {}).get('id') or item.get('anilist_id')
         try:
-            history.record(item, self.current_anime if use_current_anime else None,
-                           file_index=file_index, file_name=file_name)
+            watch_progress.mark_watched(anime_id, episode_number)
+        except Exception as exc:
+            self.show_notice(f'A reprodução iniciou, mas não foi possível salvar o progresso: {exc}')
+        try:
+            history.record(item, anime, file_index=file_index, file_name=file_name,
+                           episode_number=episode_number)
         except Exception as exc:
             self.show_notice(f'A reprodução iniciou, mas não foi possível salvar no histórico: {exc}')
+        if anime_id and (self.current_anime or {}).get('id') == anime_id:
+            self.refresh_watched_episodes()
+        credentials = settings.lastfm_credentials()
+        if (credentials['enabled'] and credentials['session_key']
+                and lastfm_progress.claim(anime_id, episode_number)):
+            anime_title = (anime or {}).get('display_title') or item.get('title', 'Anime')
+            threading.Thread(
+                target=self.scrobble_episode_themes,
+                args=(anime_id, episode_number, anime_title, credentials, int(time.time())), daemon=True,
+            ).start()
         threading.Thread(
-            target=self.monitor_playback, args=(process, file_name or item['title']), daemon=True,
+            target=self.monitor_playback,
+            args=(process, file_name or item['title'], playback_directory), daemon=True,
         ).start()
         self.show_notice(f'Abrindo no mpv: {file_name or item["title"]}')
 
-    def monitor_playback(self, process, title):
-        output, _ = process.communicate()
-        if process.returncode:
-            details = (output or '').strip().splitlines()
-            reason = '\n'.join(details[-4:])[-500:] if details else f'WebTorrent encerrou com código {process.returncode}.'
-            GLib.idle_add(self.show_notice, f'Falha ao reproduzir {title}: {reason}')
+    def scrobble_episode_themes(self, anime_id, episode_number, anime_title, credentials, timestamp):
+        try:
+            tracks = lastfm.episode_tracks(anime_id, episode_number)
+            if not tracks:
+                lastfm_progress.release(anime_id, episode_number)
+                GLib.idle_add(self.show_notice,
+                              f'Não encontrei abertura e encerramento para {anime_title}.')
+                return
+            accepted = lastfm.scrobble(
+                credentials['api_key'], credentials['api_secret'],
+                credentials['session_key'], tracks, timestamp=timestamp,
+            )
+            lastfm_progress.mark_submitted(anime_id, episode_number)
+            GLib.idle_add(self.show_notice,
+                          f'{accepted} tema(s) de {anime_title} enviados ao Last.fm.')
+        except Exception as exc:
+            lastfm_progress.release(anime_id, episode_number)
+            GLib.idle_add(self.show_notice, f'Falha ao enviar os temas ao Last.fm: {exc}')
+
+    def monitor_playback(self, process, title, playback_directory=None):
+        try:
+            output, _ = process.communicate()
+            if process.returncode:
+                details = (output or '').strip().splitlines()
+                reason = '\n'.join(details[-4:])[-500:] if details else f'WebTorrent encerrou com código {process.returncode}.'
+                GLib.idle_add(self.show_notice, f'Falha ao reproduzir {title}: {reason}')
+        finally:
+            if playback_directory is not None:
+                shutil.rmtree(playback_directory, ignore_errors=True)
 
     def open_page(self):
         query = getattr(self, 'active_search_query', '') or self.release_query.get_text().strip()

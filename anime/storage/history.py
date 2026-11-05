@@ -16,7 +16,7 @@ def load():
         return []
 
 
-def record(item, anime=None, file_index=None, file_name=None):
+def record(item, anime=None, file_index=None, file_name=None, episode_number=None):
     rows = load()
     entry = {
         'title': (anime or {}).get('display_title') or item['title'],
@@ -28,6 +28,8 @@ def record(item, anime=None, file_index=None, file_name=None):
         entry['file_index'] = file_index
     if file_name:
         entry['episode_file'] = file_name
+    if isinstance(episode_number, int) and episode_number > 0:
+        entry['episode_number'] = episode_number
     if anime and anime.get('id'):
         entry['anilist_id'] = anime['id']
     if (anime or {}).get('coverImage'):

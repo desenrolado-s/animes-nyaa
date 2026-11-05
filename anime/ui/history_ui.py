@@ -69,7 +69,8 @@ class HistoryUI:
 
     def play_history_item(self, item):
         self.play_item(item, use_current_anime=False,
-                       file_index=item.get('file_index'), file_name=item.get('episode_file'))
+                       file_index=item.get('file_index'), file_name=item.get('episode_file'),
+                       episode_number=item.get('episode_number'))
 
     def remove_history_item(self, item):
         history.remove(item)

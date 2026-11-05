@@ -23,11 +23,54 @@ def temporary_directory():
     return DEFAULT_TEMP_DIRECTORY
 
 
+def load():
+    try:
+        value = json.loads(settings_path().read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def set_temporary_directory(directory):
     """Persist a directory path, or clear it to use the /tmp default."""
     path = settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    value = {'temporary_directory': str(Path(directory).expanduser().resolve()) if directory else None}
+    value = load()
+    value['temporary_directory'] = str(Path(directory).expanduser().resolve()) if directory else None
+    _save(value)
+
+
+def lastfm_credentials():
+    value = load()
+    return {
+        'api_key': str(value.get('lastfm_api_key') or ''),
+        'api_secret': str(value.get('lastfm_api_secret') or ''),
+        'session_key': str(value.get('lastfm_session_key') or ''),
+        'username': str(value.get('lastfm_username') or ''),
+        'pending_token': str(value.get('lastfm_pending_token') or ''),
+        'enabled': bool(value.get('lastfm_enabled', True)),
+    }
+
+
+def set_lastfm_credentials(api_key, api_secret, session_key=None, username=None,
+                           pending_token=None, enabled=None):
+    value = load()
+    value['lastfm_api_key'] = str(api_key or '').strip()
+    value['lastfm_api_secret'] = str(api_secret or '').strip()
+    if session_key is not None:
+        value['lastfm_session_key'] = str(session_key)
+        value['lastfm_username'] = str(username or '')
+    if pending_token is not None:
+        value['lastfm_pending_token'] = str(pending_token)
+    if enabled is not None:
+        value['lastfm_enabled'] = bool(enabled)
+    _save(value)
+
+
+def _save(value):
+    path = settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
+    os.chmod(temporary, 0o600)
     os.replace(temporary, path)

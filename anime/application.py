@@ -1,11 +1,14 @@
 """GTK application shell and composition of the UI components."""
 import sys
+import threading
+import webbrowser
 
 import gi
 gi.require_version('Adw', '1')
 gi.require_version('Gtk', '4.0')
 from gi.repository import Adw, Gio, GLib, Gtk
 
+from .services import lastfm
 from .storage import settings
 from .ui.catalog_ui import CatalogUI
 from .ui.common import CommonUI
@@ -169,7 +172,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
 
     def show_settings(self):
         window = Adw.PreferencesWindow(transient_for=self.window, modal=True, title='Configurações')
-        window.set_default_size(620, 360)
+        window.set_default_size(700, 620)
         page = Adw.PreferencesPage(title='Geral', icon_name='preferences-system-symbolic')
         group = Adw.PreferencesGroup(
             title='Downloads temporários',
@@ -187,8 +190,152 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         row.add_suffix(actions)
         group.add(row)
         page.add(group)
+
+        lastfm_group = Adw.PreferencesGroup(
+            title='Last.fm',
+            description='Envie a abertura e o encerramento de cada episódio na primeira reprodução.',
+        )
+        credentials = settings.lastfm_credentials()
+        self.lastfm_api_key_entry = Gtk.Entry(placeholder_text='Chave de API do Last.fm',
+                                               text=credentials['api_key'], hexpand=True)
+        api_key_row = Adw.ActionRow(title='Chave de API')
+        api_key_row.add_suffix(self.lastfm_api_key_entry)
+        lastfm_group.add(api_key_row)
+        self.lastfm_api_secret_entry = Gtk.PasswordEntry(placeholder_text='Segredo da API', hexpand=True)
+        self.lastfm_api_secret_entry.set_text(credentials['api_secret'])
+        self.lastfm_api_secret_entry.set_show_peek_icon(True)
+        secret_row = Adw.ActionRow(title='Segredo da API')
+        secret_row.add_suffix(self.lastfm_api_secret_entry)
+        lastfm_group.add(secret_row)
+
+        self.lastfm_enabled_switch = Gtk.Switch(active=credentials['enabled'], valign=Gtk.Align.CENTER)
+        self.lastfm_enabled_switch.connect('notify::active', self.lastfm_enabled_changed)
+        enabled_row = Adw.ActionRow(title='Enviar temas ao Last.fm',
+                                    subtitle='Cada episódio é enviado uma única vez.')
+        enabled_row.add_suffix(self.lastfm_enabled_switch)
+        enabled_row.set_activatable_widget(self.lastfm_enabled_switch)
+        lastfm_group.add(enabled_row)
+
+        actions_row = Adw.ActionRow(title='Conectar conta')
+        self.lastfm_status = Gtk.Label(xalign=1, wrap=True,
+                                      label=self.lastfm_status_text(credentials))
+        self.lastfm_status.set_max_width_chars(30)
+        actions_row.add_suffix(self.lastfm_status)
+        self.lastfm_connect_button = Gtk.Button(label='Autorizar')
+        self.lastfm_connect_button.connect('clicked', self.start_lastfm_authorization)
+        actions_row.add_suffix(self.lastfm_connect_button)
+        self.lastfm_finish_button = Gtk.Button(label='Concluir conexão')
+        self.lastfm_finish_button.set_visible(bool(credentials['pending_token']))
+        self.lastfm_finish_button.connect('clicked', self.finish_lastfm_authorization)
+        actions_row.add_suffix(self.lastfm_finish_button)
+        lastfm_group.add(actions_row)
+
+        info_row = Adw.ActionRow(title='Credenciais do aplicativo',
+                                 subtitle='Crie uma chave em last.fm/api/account/create. Os dados ficam neste computador.')
+        api_link = Gtk.LinkButton(uri='https://www.last.fm/api/account/create', label='Obter chave')
+        info_row.add_suffix(api_link)
+        lastfm_group.add(info_row)
+        page.add(lastfm_group)
         window.add(page)
         window.present()
+
+    @staticmethod
+    def lastfm_status_text(credentials):
+        if credentials['username']:
+            return f"Conectado como {credentials['username']}"
+        if credentials['pending_token']:
+            return 'Autorize no navegador e conclua a conexão.'
+        return 'Conta não conectada'
+
+    def save_lastfm_settings(self):
+        api_key = self.lastfm_api_key_entry.get_text().strip()
+        api_secret = self.lastfm_api_secret_entry.get_text().strip()
+        old = settings.lastfm_credentials()
+        changed = api_key != old['api_key'] or api_secret != old['api_secret']
+        settings.set_lastfm_credentials(
+            api_key, api_secret,
+            session_key='' if changed else None,
+            username='' if changed else None,
+            pending_token='' if changed else None,
+            enabled=self.lastfm_enabled_switch.get_active(),
+        )
+
+    def lastfm_enabled_changed(self, switch, *_args):
+        try:
+            self.save_lastfm_settings()
+        except OSError as error:
+            self.show_notice(f'Não foi possível salvar a configuração do Last.fm: {error}')
+
+    def start_lastfm_authorization(self, *_args):
+        api_key = self.lastfm_api_key_entry.get_text().strip()
+        api_secret = self.lastfm_api_secret_entry.get_text().strip()
+        if not api_key or not api_secret:
+            self.lastfm_status.set_text('Informe a chave e o segredo da API.')
+            return
+        try:
+            self.save_lastfm_settings()
+        except OSError as error:
+            self.lastfm_status.set_text(f'Falha ao salvar: {error}')
+            return
+        self.lastfm_connect_button.set_sensitive(False)
+        self.lastfm_status.set_text('Solicitando autorização…')
+
+        def worker():
+            try:
+                token = lastfm.request_token(api_key, api_secret)
+                GLib.idle_add(self.open_lastfm_authorization, api_key, token)
+            except Exception as error:
+                GLib.idle_add(self.lastfm_authorization_failed, str(error))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_lastfm_authorization(self, api_key, token):
+        try:
+            settings.set_lastfm_credentials(
+                api_key, self.lastfm_api_secret_entry.get_text().strip(), pending_token=token,
+            )
+            webbrowser.open(lastfm.authorization_url(api_key, token))
+            self.lastfm_status.set_text('Autorize Anime Nyaa no navegador e clique em “Concluir conexão”.')
+            self.lastfm_finish_button.set_visible(True)
+        except Exception as error:
+            self.lastfm_status.set_text(f'Não foi possível abrir a autorização: {error}')
+        self.lastfm_connect_button.set_sensitive(True)
+        return False
+
+    def lastfm_authorization_failed(self, message):
+        self.lastfm_status.set_text(message)
+        self.lastfm_connect_button.set_sensitive(True)
+        return False
+
+    def finish_lastfm_authorization(self, *_args):
+        credentials = settings.lastfm_credentials()
+        if not credentials['pending_token']:
+            self.lastfm_status.set_text('Clique em “Autorizar” e aprove o acesso no navegador primeiro.')
+            return
+        self.lastfm_finish_button.set_sensitive(False)
+        self.lastfm_status.set_text('Concluindo conexão…')
+
+        def worker():
+            try:
+                session_key, username = lastfm.create_session(
+                    credentials['api_key'], credentials['api_secret'], credentials['pending_token'],
+                )
+                settings.set_lastfm_credentials(
+                    credentials['api_key'], credentials['api_secret'], session_key=session_key,
+                    username=username, pending_token='',
+                )
+                GLib.idle_add(self.lastfm_connection_succeeded, username)
+            except Exception as error:
+                GLib.idle_add(self.lastfm_authorization_failed, str(error))
+                GLib.idle_add(self.lastfm_finish_button.set_sensitive, True)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def lastfm_connection_succeeded(self, username):
+        self.lastfm_status.set_text(f'Conectado como {username}')
+        self.lastfm_finish_button.set_visible(False)
+        self.lastfm_finish_button.set_sensitive(True)
+        return False
 
     def choose_temporary_directory(self, parent, row):
         chooser = Gtk.FileChooserNative.new(
