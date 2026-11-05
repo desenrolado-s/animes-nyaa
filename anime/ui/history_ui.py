@@ -7,6 +7,7 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Adw, Gtk
 
 from ..storage import history
+from .i18n import tr
 
 
 class HistoryUI:
@@ -28,8 +29,8 @@ class HistoryUI:
         self.history_list.set_vexpand(True)
         self.history_list.set_placeholder(Adw.StatusPage(
             icon_name='document-open-recent-symbolic',
-            title='Seu histórico está vazio',
-            description='Os animes reproduzidos aparecerão aqui.',
+            title=tr('Seu histórico está vazio'),
+            description=tr('Os animes reproduzidos aparecerão aqui.'),
         ))
         scroller = Gtk.ScrolledWindow(vexpand=True)
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -40,14 +41,14 @@ class HistoryUI:
     def show_history(self):
         self.refresh_history_page()
         self.stack.set_visible_child_name('history')
-        self.show_notice(f'{len(history.load())} reproduções no histórico.')
+        self.show_notice(tr(f'{len(history.load())} reproduções no histórico.'))
 
     def refresh_history_page(self):
         self.clear_list(self.history_list)
         rows = history.load()[:100]
-        self.history_count.set_text(f'{len(rows)} reproduções')
+        self.history_count.set_text(tr(f'{len(rows)} reproduções'))
         for item in rows:
-            title = item.get('title') or 'Anime sem título'
+            title = item.get('title') or tr('Anime sem título')
             episode = item.get('episode_file') or item.get('release') or 'Release desconhecida'
             released = item.get('release') or ''
             watched = self.history_timestamp(item.get('watched_at', ''))

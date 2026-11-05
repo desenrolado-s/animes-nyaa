@@ -23,6 +23,21 @@ def temporary_directory():
     return DEFAULT_TEMP_DIRECTORY
 
 
+def language():
+    """Return the saved interface language, defaulting to English."""
+    value = load()
+    return value.get('language') if value.get('language') in ('en', 'pt') else 'en'
+
+
+def set_language(language_code):
+    """Persist the interface language."""
+    if language_code not in ('en', 'pt'):
+        raise ValueError('Unsupported language')
+    value = load()
+    value['language'] = language_code
+    _save(value)
+
+
 def load():
     try:
         value = json.loads(settings_path().read_text(encoding='utf-8'))

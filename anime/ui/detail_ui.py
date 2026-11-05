@@ -14,6 +14,7 @@ from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 from ..services import anilist, episode_titles
 from ..storage import library, watch_progress
 from .common import IMAGE_POOL
+from .i18n import tr
 
 
 class _PlainText(HTMLParser):
@@ -33,7 +34,7 @@ class DetailUI:
         nav = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
         back = Gtk.Button.new_from_icon_name('go-previous-symbolic')
         back.add_css_class('flat')
-        back.set_tooltip_text('Voltar ao catálogo')
+        back.set_tooltip_text(tr('Voltar ao catálogo'))
         back.connect('clicked', lambda *_: self.show_catalog())
         nav.append(back)
         self.anime_tabs = Adw.ViewStack(vexpand=True, hexpand=True)
@@ -51,19 +52,19 @@ class DetailUI:
         episode_page.set_position(390)
         episode_page.set_start_child(self.build_anime_overview())
         episode_page.set_end_child(self.build_episode_panel())
-        self.anime_tabs.add_titled(episode_page, 'episodes', 'Episódios')
+        self.anime_tabs.add_titled(episode_page, 'episodes', tr('Episódios'))
 
         self.batch_view = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
         batch_catalog_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         batch_catalog_page.set_margin_top(8)
-        batch_intro = Adw.ActionRow(title='Assistir um batch',
-                                    subtitle='Escolha um torrent para ver os episódios que ele contém.')
+        batch_intro = Adw.ActionRow(title=tr('Assistir um batch'),
+                                    subtitle=tr('Escolha um torrent para ver os episódios que ele contém.'))
         batch_intro.add_prefix(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
         batch_catalog_page.append(batch_intro)
-        self.batch_search_query = Gtk.Entry(placeholder_text='Consulta de batches no Nyaa', hexpand=True)
+        self.batch_search_query = Gtk.Entry(placeholder_text=tr('Consulta de batches no Nyaa'), hexpand=True)
         self.batch_search_query.connect('activate', lambda *_: self.search_edited_batches())
         batch_catalog_page.append(self.batch_search_query)
-        self.batch_search_extra = Gtk.Entry(placeholder_text='Padrão adicional (opcional)', hexpand=True)
+        self.batch_search_extra = Gtk.Entry(placeholder_text=tr('Padrão adicional (opcional)'), hexpand=True)
         self.batch_search_extra.set_visible(False)
         batch_catalog_page.append(self.batch_search_extra)
         batch_search_actions = Gtk.Box(spacing=8)
@@ -85,7 +86,7 @@ class DetailUI:
         batch_nav = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
         back_to_batches = Gtk.Button.new_from_icon_name('go-previous-symbolic')
         back_to_batches.add_css_class('flat')
-        back_to_batches.set_tooltip_text('Voltar aos batches')
+        back_to_batches.set_tooltip_text(tr('Voltar aos batches'))
         back_to_batches.connect('clicked', lambda *_: self.batch_view.set_visible_child_name('catalog'))
         batch_nav.append(back_to_batches)
         self.batch_episode_heading = self.label('')
@@ -98,7 +99,7 @@ class DetailUI:
         batch_nav.append(self.batch_episode_count)
         batch_episodes_page.append(batch_nav)
 
-        self.batch_episode_search = Gtk.SearchEntry(placeholder_text='Filtrar arquivos do batch…')
+        self.batch_episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar arquivos do batch…'))
         self.batch_episode_search.set_search_delay(120)
         self.batch_episode_search.connect('search-changed', self.filter_batch_episodes)
         batch_episodes_page.append(self.batch_episode_search)
@@ -189,7 +190,7 @@ class DetailUI:
         heading.append(self.episode_count_label)
         panel.append(heading)
 
-        self.episode_search = Gtk.SearchEntry(placeholder_text='Filtrar episódios…')
+        self.episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar episódios…'))
         self.episode_search.set_search_delay(120)
         self.episode_search.connect('search-changed', self.filter_episodes)
         panel.append(self.episode_search)
@@ -204,8 +205,8 @@ class DetailUI:
         self.episode_content.add_named(episode_scroll, 'list')
         empty_state = Adw.StatusPage(
             icon_name='view-list-symbolic',
-            title='Episódios indisponíveis',
-            description='AniList não informa a quantidade de episódios. Confira os batches disponíveis.',
+            title=tr('Episódios indisponíveis'),
+            description=tr('AniList não informa a quantidade de episódios. Confira os batches disponíveis.'),
         )
         empty_state.set_child(self.button('Ver batches', lambda: self.anime_tabs.set_visible_child_name('batches')))
         self.episode_content.add_named(empty_state, 'empty')
@@ -222,12 +223,12 @@ class DetailUI:
         self.overview_title.set_text(self.current_anime['display_title'])
 
         count = anilist.episode_count(media)
-        self.episode_count_label.set_text(f'{count} eps.' if count else 'Episódios')
+        self.episode_count_label.set_text(tr(f'{count} eps.') if count else tr('Episódios'))
         self.anime_metadata.set_text(self.anime_meta_text(media, count))
         genres = media.get('genres') or []
         self.anime_genres.set_text('  ·  '.join(genres[:5]))
         self.anime_summary.set_text(self.plain_description(media.get('description') or '') or
-                                    'Sinopse indisponível.')
+                                    tr('Sinopse indisponível.'))
         self.load_anime_poster(media)
 
         self.anime_tabs.set_visible_child_name('episodes')
@@ -239,8 +240,8 @@ class DetailUI:
         self.refresh_watched_episodes()
         self.fetch_episode_titles(media)
         self.stack.set_visible_child_name('anime')
-        self.show_notice(f'{count} episódios no catálogo.' if count else
-                    'AniList não informa o total de episódios; você ainda pode buscar batches.')
+        self.show_notice(tr(f'{count} episódios no catálogo.') if count else
+                    tr('AniList não informa o total de episódios; você ainda pode buscar batches.'))
 
     def fetch_episode_titles(self, media):
         media_id = media.get('id')
@@ -272,14 +273,14 @@ class DetailUI:
         for number, _filename, row, _file in getattr(self, 'batch_episode_rows', []):
             title = titles.get(number)
             if title:
-                row.set_title(f'Episódio {number:02d} · {title}')
+                row.set_title(tr(f'Episódio {number:02d} · {title}'))
         if getattr(self, 'active_episode', None) in titles:
             self.results_heading.set_text(self.episode_row_title(self.active_episode))
         return False
 
     def episode_row_title(self, number):
         title = self.current_episode_titles.get(number)
-        return f'Episódio {number:02d} · {title}' if title else f'Episódio {number:02d}'
+        return tr(f'Episódio {number:02d} · {title}') if title else tr(f'Episódio {number:02d}')
 
     @staticmethod
     def anime_meta_text(media, count):
@@ -289,7 +290,7 @@ class DetailUI:
         if media.get('seasonYear'):
             values.append(str(media['seasonYear']))
         if count:
-            values.append(f'{count} episódios')
+            values.append(tr(f'{count} episódios'))
         if media.get('averageScore'):
             values.append(f'★ {media["averageScore"] / 10:.1f}')
         return '  ·  '.join(values)
@@ -330,19 +331,19 @@ class DetailUI:
         self.episode_content.set_visible_child_name('list' if count else 'empty')
         for number in range(1, count + 1):
             row = Adw.ActionRow(title=self.episode_row_title(number),
-                                subtitle='Pesquisar releases no Nyaa')
+                                subtitle=tr('Pesquisar releases no Nyaa'))
             number_badge = Gtk.Label(label=f'{number:02d}')
             number_badge.add_css_class('numeric')
             number_badge.add_css_class('dim-label')
             row.add_prefix(number_badge)
             search_button = Gtk.Button.new_from_icon_name('system-search-symbolic')
             search_button.add_css_class('flat')
-            search_button.set_tooltip_text(f'Pesquisar episódio {number:02d}')
+            search_button.set_tooltip_text(tr(f'Pesquisar episódio {number:02d}'))
             search_button.connect('clicked', lambda *_args, episode=number: self.search_episode(episode))
             row.add_suffix(search_button)
             watched_badge = Gtk.Label(label='✓')
             watched_badge.add_css_class('success')
-            watched_badge.set_tooltip_text('Assistido')
+            watched_badge.set_tooltip_text(tr('Assistido'))
             watched_badge.set_visible(False)
             row.add_suffix(watched_badge)
             row.set_activatable(True)
