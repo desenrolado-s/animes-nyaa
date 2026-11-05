@@ -78,7 +78,7 @@ jobs:
       - name: Install GTK build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv xvfb xauth dbus-x11
+          sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv xvfb xauth dbus-x11 zsync
       - name: Run offline tests
         run: /usr/bin/python3 -m unittest discover -s tests -v
       - name: Build executable bundle
@@ -92,8 +92,13 @@ jobs:
           rm -rf dist/anime-nyaa/_internal/share/glib-2.0/schemas
           # Avoid packaging the build host's complete icon theme (hundreds of MB).
           rm -rf dist/anime-nyaa/_internal/share/icons
+          bash scripts/bundle-ca-certificates.sh dist/anime-nyaa/_internal/certs
+          bash scripts/bundle-gtk-typelibs.sh dist/anime-nyaa/_internal/gi_typelibs
           mkdir -p dist/anime-nyaa
-          cp packaging/linux/anime-nyaa.desktop dist/anime-nyaa/
+          release_version='${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}'
+          sed -e "s|@APPIMAGE_VERSION@|${release_version}|" \
+            -e 's|@APPIMAGE_ARCH@|x86_64|' packaging/linux/anime-nyaa.desktop > dist/anime-nyaa/anime-nyaa.desktop
+          cp packaging/linux/anime-nyaa.png dist/anime-nyaa/
           cat > dist/anime-nyaa/README.txt <<'EOF'
           Anime Nyaa executable bundle
 
@@ -109,6 +114,19 @@ jobs:
           GTK_A11Y: none
           GSK_RENDERER: cairo
         run: dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test
+      - name: Build Linux AppImage
+        env:
+          APPIMAGE_VERSION: ${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}
+          APPIMAGE_UPDATE_INFO: zsync|https://github.com/${{ github.repository }}/releases/download/${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}/anime-nyaa-linux-x86_64-${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}.AppImage.zsync
+        run: bash scripts/build-appimage.sh
+      - name: Smoke test AppImage
+        timeout-minutes: 3
+        env:
+          GDK_BACKEND: x11
+          NO_AT_BRIDGE: '1'
+          GTK_A11Y: none
+          GSK_RENDERER: cairo
+        run: dbus-run-session -- xvfb-run -a dist/anime-nyaa-linux-x86_64-v${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}.AppImage --appimage-extract-and-run --smoke-test
       - name: Archive executable bundle
         env:
           RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}
@@ -119,7 +137,7 @@ jobs:
         run: git archive --format=tar --prefix=anime-nyaa/ HEAD | gzip -n > "dist/anime-nyaa-source-${RELEASE_TAG}.tar.gz"
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum anime-nyaa-*.tar.gz > SHA256SUMS.txt
+        run: sha256sum anime-nyaa-linux-x86_64-*.AppImage* anime-nyaa-*.tar.gz > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: anime-nyaa-release-assets
