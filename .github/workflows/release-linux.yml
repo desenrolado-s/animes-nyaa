@@ -1,29 +1,172 @@
-name: Linux release
+name: Build and release Linux app
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  version:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        run: |
+          tag="v$(bash scripts/next-version.sh)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  reserve-version:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 20); do
+            git fetch --force --tags origin
+            tag="v$(bash scripts/next-version.sh)"
+            existing_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)
+            if [[ -n "$existing_sha" ]]; then
+              if [[ "$existing_sha" == "$RELEASE_SHA" ]]; then
+                break
+              fi
+              continue
+            fi
+            if gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" -f sha="${RELEASE_SHA}" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          test -n "${tag:-}"
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha')
+          test "$tag_sha" = "$RELEASE_SHA"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [version, reserve-version]
+    if: >-
+      !cancelled() &&
+      (needs.version.result == 'success' || needs.reserve-version.result == 'success')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Run offline tests
-        run: python -m unittest discover -s tests -v
-      - name: Build Linux source bundle
+      - name: Install GTK build dependencies
         run: |
-          mkdir -p dist
-          git archive --format=tar --prefix=anime-nyaa/ HEAD | gzip -n > "dist/anime-nyaa-linux-${GITHUB_REF_NAME}.tar.gz"
-          sha256sum "dist/anime-nyaa-linux-${GITHUB_REF_NAME}.tar.gz" > "dist/anime-nyaa-linux-${GITHUB_REF_NAME}.sha256"
-      - name: Publish GitHub release
+          sudo apt-get update
+          sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv xvfb xauth dbus-x11 zsync
+      - name: Run offline tests
+        run: /usr/bin/python3 -m unittest discover -s tests -v
+      - name: Build executable bundle
+        run: |
+          /usr/bin/python3 -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install -r requirements-build.txt
+          .venv/bin/python -m PyInstaller --noconfirm --clean anime-nyaa.spec
+          # GTK/PyGObject must use the host's coherent GLib/GTK runtime.
+          find dist/anime-nyaa \( -name 'libglib-2.0.so*' -o -name 'libgobject-2.0.so*' -o -name 'libgio-2.0.so*' -o -name 'libgmodule-2.0.so*' -o -name 'libgirepository-*.so*' \) -delete
+          rm -rf dist/anime-nyaa/_internal/gio_modules dist/anime-nyaa/gio_modules
+          rm -rf dist/anime-nyaa/_internal/share/glib-2.0/schemas
+          # Avoid packaging the build host's complete icon theme (hundreds of MB).
+          rm -rf dist/anime-nyaa/_internal/share/icons
+          bash scripts/bundle-ca-certificates.sh dist/anime-nyaa/_internal/certs
+          bash scripts/bundle-gtk-typelibs.sh dist/anime-nyaa/_internal/gi_typelibs
+          mkdir -p dist/anime-nyaa
+          release_version='${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}'
+          sed -e "s|@APPIMAGE_VERSION@|${release_version}|" \
+            -e 's|@APPIMAGE_ARCH@|x86_64|' packaging/linux/anime-nyaa.desktop > dist/anime-nyaa/anime-nyaa.desktop
+          cp packaging/linux/anime-nyaa.png dist/anime-nyaa/
+          cat > dist/anime-nyaa/README.txt <<'EOF'
+          Anime Nyaa executable bundle
+
+          Run ./anime-nyaa to start the application.
+          System requirements: Linux x86_64, GTK 4, Libadwaita, mpv,
+          Node.js and WebTorrent CLI.
+          EOF
+      - name: Smoke test packaged GTK app
+        timeout-minutes: 3
+        env:
+          GDK_BACKEND: x11
+          NO_AT_BRIDGE: '1'
+          GTK_A11Y: none
+          GSK_RENDERER: cairo
+        run: dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test
+      - name: Build Linux AppImage
+        env:
+          APPIMAGE_VERSION: ${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}
+          APPIMAGE_UPDATE_INFO: zsync|https://github.com/${{ github.repository }}/releases/download/${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}/anime-nyaa-linux-x86_64-${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}.AppImage.zsync
+        run: bash scripts/build-appimage.sh
+      - name: Smoke test AppImage
+        timeout-minutes: 3
+        env:
+          GDK_BACKEND: x11
+          NO_AT_BRIDGE: '1'
+          GTK_A11Y: none
+          GSK_RENDERER: cairo
+        run: dbus-run-session -- xvfb-run -a dist/anime-nyaa-linux-x86_64-v${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}.AppImage --appimage-extract-and-run --smoke-test
+      - name: Archive executable bundle
+        env:
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}
+        run: tar -czf "dist/anime-nyaa-linux-x86_64-${RELEASE_TAG}.tar.gz" -C dist anime-nyaa
+      - name: Create source archive
+        env:
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}
+        run: git archive --format=tar --prefix=anime-nyaa/ HEAD | gzip -n > "dist/anime-nyaa-source-${RELEASE_TAG}.tar.gz"
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum anime-nyaa-linux-x86_64-*.AppImage* anime-nyaa-*.tar.gz > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anime-nyaa-release-assets
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [reserve-version, build]
+    if: github.ref == 'refs/heads/main' && needs.reserve-version.result == 'success' && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: anime-nyaa-release-assets
+          path: release-assets
+      - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Anime Nyaa $GITHUB_REF_NAME" --generate-notes
-
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "Anime Nyaa $RELEASE_TAG" \
+              --generate-notes
+          fi

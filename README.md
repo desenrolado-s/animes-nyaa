@@ -25,7 +25,9 @@ npm install --global webtorrent-cli
 ./anime-nyaa
 ```
 
-As versões Linux publicadas oferecem um arquivo `.tar.gz` com o código e o lançador, além de um arquivo SHA-256 para conferência. Extraia o pacote e execute `./anime-nyaa`; as dependências de GTK 4, Libadwaita, Python, mpv e WebTorrent CLI listadas acima precisam estar instaladas no sistema.
+As versões Linux publicadas incluem um AppImage, um pacote executável `.tar.gz`, um arquivo com o código-fonte, metadados `.zsync` para atualização incremental e `SHA256SUMS.txt`. Para usar o AppImage, baixe-o, torne-o executável com `chmod +x anime-nyaa-linux-x86_64-v*.AppImage` e abra-o. No pacote `.tar.gz`, extraia a pasta e rode `./anime-nyaa`. GTK 4, Libadwaita, mpv, Node.js e WebTorrent CLI precisam estar instalados no sistema para o pacote `.tar.gz`; ambos os formatos incluem o interpretador Python e os módulos do aplicativo.
+
+O AppImage inclui o endereço de atualização incremental; com o [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate), atualize os blocos alterados usando o arquivo `.zsync` publicado junto dele.
 
 Use a barra lateral para navegar pelo catálogo, pela **Minha lista** e pelo **Histórico**, ou para escolher a categoria dos torrents. Na ficha do anime, **Minha lista** salva ou remove o anime da sua lista pessoal. Cada episódio procura no Nyaa tanto pelo número com zero à esquerda (por exemplo, `01`) quanto sem ele (`1`); a consulta usada pode ser conferida e editada nos resultados, com um padrão adicional opcional. Na aba **Batches**, escolha um torrent para carregar os arquivos de vídeo que ele contém; cada episódio pode ser aberto individualmente no mpv. Use a estrela em um batch para mantê-lo no topo dos resultados daquele anime.
 
@@ -49,3 +51,7 @@ Adicione o diretório do projeto ao `PATH` (por exemplo, criando um link em `~/.
 - `anime-nyaa`: lançador do app.
 
 Capas são baixadas sob demanda e armazenadas em `~/.cache/anime-nyaa/covers/` para reutilização offline.
+
+## Releases
+
+Cada push na branch `main` executa os testes, compila o aplicativo GTK para Linux x86_64 com PyInstaller e publica uma GitHub Release com AppImage, pacote `.tar.gz`, código-fonte, atualização `.zsync` e checksums SHA-256. A versão é incrementada automaticamente a partir das tags existentes (`v1.0.0` → `v1.0.1`); os pacotes incluem a tag no nome. O build reserva uma tag por push e executa smoke tests no bundle e no AppImage antes da publicação.

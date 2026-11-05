@@ -5,4 +5,6 @@ Comment=Search anime torrents and stream them with mpv
 Exec=anime-nyaa
 Icon=anime-nyaa
 Terminal=false
-Categories=AudioVideo;Video;Network;
+Categories=AudioVideo;Network;
+X-AppImage-Version=@APPIMAGE_VERSION@
+X-AppImage-Arch=@APPIMAGE_ARCH@
