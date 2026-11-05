@@ -102,7 +102,13 @@ jobs:
           Node.js and WebTorrent CLI.
           EOF
       - name: Smoke test packaged GTK app
-        run: GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test
+        timeout-minutes: 3
+        env:
+          GDK_BACKEND: x11
+          NO_AT_BRIDGE: '1'
+          GTK_A11Y: none
+          GSK_RENDERER: cairo
+        run: dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test
       - name: Archive executable bundle
         env:
           RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}
