@@ -41,6 +41,7 @@ cat > "$appdir/AppRun" <<'RUN'
 #!/bin/sh
 HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 APP_DIR="$HERE/usr/anime-nyaa"
+export PATH="$APP_DIR/_internal/node/bin:$APP_DIR/_internal/webtorrent-cli/node_modules/.bin:$PATH"
 GI_TYPELIB_PATH="$APP_DIR/_internal/gi_typelibs${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
 for path in /usr/lib64/girepository-1.0 /usr/lib/girepository-1.0 /usr/lib/x86_64-linux-gnu/girepository-1.0; do
   [ -d "$path" ] && GI_TYPELIB_PATH="$GI_TYPELIB_PATH:$path"
