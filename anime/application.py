@@ -1,12 +1,14 @@
 """GTK application shell and composition of the UI components."""
+import os
 import sys
 import threading
 import webbrowser
 
 import gi
 gi.require_version('Adw', '1')
+gi.require_version('Gdk', '4.0')
 gi.require_version('Gtk', '4.0')
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from .services import lastfm
 from .storage import settings
@@ -32,10 +34,28 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.search_mode = 'episode'
         self.active_query = ''
 
+    def _configure_bundled_icon_fallback(self, display):
+        bundle = getattr(sys, '_MEIPASS', None)
+        if not bundle:
+            return
+        icon_directory = os.path.join(bundle, 'share', 'icons')
+        if not os.path.isfile(os.path.join(icon_directory, 'hicolor', 'index.theme')):
+            return
+
+        # Add the fallback theme directly: GTK may initialize its icon search
+        # path before the PyInstaller runtime hook's XDG_DATA_DIRS change takes effect.
+        icon_theme = Gtk.IconTheme.get_for_display(display)
+        search_path = icon_theme.get_search_path() or []
+        if icon_directory not in search_path:
+            icon_theme.set_search_path([icon_directory, *search_path])
+
     def do_activate(self):
         if getattr(self, 'window', None):
             self.window.present()
             return
+        display = Gdk.Display.get_default()
+        if display is not None:
+            self._configure_bundled_icon_fallback(display)
         self.window = Adw.ApplicationWindow(application=self, title='にゃあ')
         self.window.set_default_size(1120, 800)
 
