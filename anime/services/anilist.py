@@ -118,7 +118,7 @@ def torrent_query(media):
 def episode_count(media):
     count = media.get('episodes')
     if count:
-        return min(int(count), 1000)
+        return max(int(count), 0)
     airing = media.get('nextAiringEpisode') or {}
     upcoming = airing.get('episode')
-    return min(max(int(upcoming) - 1, 0), 1000) if upcoming else 0
+    return max(int(upcoming) - 1, 0) if upcoming else 0

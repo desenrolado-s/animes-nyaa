@@ -17,6 +17,9 @@ from .common import IMAGE_POOL
 from .i18n import tr
 
 
+EPISODE_RENDER_BATCH_SIZE = 40
+
+
 class _PlainText(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -75,10 +78,11 @@ class DetailUI:
         self.batch_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.batch_list.add_css_class('boxed-list')
         self.batch_list.set_placeholder(self.label('Nenhum batch salvo ainda. Use Buscar batches para procurar releases.', 'dim-label'))
-        batch_scroll = Gtk.ScrolledWindow(vexpand=True)
-        batch_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        batch_scroll.set_child(self.batch_list)
-        batch_catalog_page.append(batch_scroll)
+        self.batch_scroll = Gtk.ScrolledWindow(vexpand=True)
+        self.batch_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.batch_scroll.set_child(self.batch_list)
+        self._connect_scroll_loader(self.batch_scroll, self.load_more_batch_rows)
+        batch_catalog_page.append(self.batch_scroll)
         self.batch_view.add_named(batch_catalog_page, 'catalog')
 
         batch_episodes_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -110,10 +114,11 @@ class DetailUI:
         no_batch_matches.set_margin_top(24)
         no_batch_matches.set_halign(Gtk.Align.CENTER)
         self.batch_episode_list.set_placeholder(no_batch_matches)
-        batch_episode_scroll = Gtk.ScrolledWindow(vexpand=True)
-        batch_episode_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        batch_episode_scroll.set_child(self.batch_episode_list)
-        batch_episodes_page.append(batch_episode_scroll)
+        self.batch_episode_scroll = Gtk.ScrolledWindow(vexpand=True)
+        self.batch_episode_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.batch_episode_scroll.set_child(self.batch_episode_list)
+        self._connect_scroll_loader(self.batch_episode_scroll, self.load_more_batch_episodes)
+        batch_episodes_page.append(self.batch_episode_scroll)
         self.batch_episode_rows = []
         self.batch_view.add_named(batch_episodes_page, 'episodes')
         self.anime_tabs.add_titled(self.batch_view, 'batches', 'Batches')
@@ -197,11 +202,16 @@ class DetailUI:
         self.episode_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         self.episode_list.add_css_class('boxed-list')
         self.episode_list.set_vexpand(True)
-        episode_scroll = Gtk.ScrolledWindow(vexpand=True)
-        episode_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        episode_scroll.set_child(self.episode_list)
+        no_episode_matches = self.label('Nenhum episódio corresponde à busca.', 'dim-label')
+        no_episode_matches.set_margin_top(24)
+        no_episode_matches.set_halign(Gtk.Align.CENTER)
+        self.episode_list.set_placeholder(no_episode_matches)
+        self.episode_scroll = Gtk.ScrolledWindow(vexpand=True)
+        self.episode_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.episode_scroll.set_child(self.episode_list)
+        self._connect_scroll_loader(self.episode_scroll, self.load_more_episodes)
         self.episode_content = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
-        self.episode_content.add_named(episode_scroll, 'list')
+        self.episode_content.add_named(self.episode_scroll, 'list')
         empty_state = Adw.StatusPage(
             icon_name='view-list-symbolic',
             title=tr('Episódios indisponíveis'),
@@ -273,6 +283,8 @@ class DetailUI:
             title = titles.get(number)
             if title:
                 row.set_title(tr(f'Episódio {number:02d} · {title}'))
+        if getattr(self, 'episode_filter_query', ''):
+            self.filter_episodes()
         if getattr(self, 'active_episode', None) in titles:
             self.results_heading.set_text(self.episode_row_title(self.active_episode))
         return False
@@ -324,11 +336,56 @@ class DetailUI:
 
     def populate_episodes(self, count):
         self.clear_list(self.episode_list)
+        self.episode_scroll.get_vadjustment().set_value(0)
         self.episode_rows = []
         self.episode_watched_badges = {}
+        self.episode_count = count
+        self.watched_episodes = watch_progress.watched_episodes((self.current_anime or {}).get('id'))
+        self.episode_filter_query = ''
+        self.episode_filtered_numbers = range(1, count + 1)
+        self.episode_rendered_count = 0
         self.episode_search.set_visible(bool(count))
         self.episode_content.set_visible_child_name('list' if count else 'empty')
-        for number in range(1, count + 1):
+        self.episode_search.set_text('')
+        self.load_more_episodes()
+
+    def _connect_scroll_loader(self, scroller, loader):
+        if not hasattr(self, '_scroll_loader_pending'):
+            self._scroll_loader_pending = set()
+        key = id(scroller)
+        adjustment = scroller.get_vadjustment()
+        callback = lambda *_: self._queue_scroll_loader(scroller, loader, key)
+        adjustment.connect('value-changed', callback)
+        adjustment.connect('changed', callback)
+
+    def _queue_scroll_loader(self, scroller, loader, key):
+        if key in self._scroll_loader_pending:
+            return
+        if not self._is_near_scroll_end(scroller):
+            return
+        self._scroll_loader_pending.add(key)
+        GLib.idle_add(self._run_scroll_loader, scroller, loader, key)
+
+    @staticmethod
+    def _is_near_scroll_end(scroller):
+        if not scroller.get_mapped():
+            return False
+        adjustment = scroller.get_vadjustment()
+        if adjustment.get_page_size() <= 0:
+            return False
+        threshold = max(adjustment.get_page_size() * 0.6, 360)
+        return adjustment.get_upper() - (adjustment.get_value() + adjustment.get_page_size()) <= threshold
+
+    def _run_scroll_loader(self, scroller, loader, key):
+        self._scroll_loader_pending.discard(key)
+        if self._is_near_scroll_end(scroller):
+            loader()
+        return False
+
+    def load_more_episodes(self):
+        start = self.episode_rendered_count
+        end = min(start + EPISODE_RENDER_BATCH_SIZE, len(self.episode_filtered_numbers))
+        for number in self.episode_filtered_numbers[start:end]:
             row = Adw.ActionRow(title=self.episode_row_title(number),
                                 subtitle=tr('Pesquisar releases no Nyaa'))
             number_badge = Gtk.Label(label=f'{number:02d}')
@@ -343,18 +400,20 @@ class DetailUI:
             watched_badge = Gtk.Label(label='✓')
             watched_badge.add_css_class('success')
             watched_badge.set_tooltip_text(tr('Assistido'))
-            watched_badge.set_visible(False)
+            watched_badge.set_visible(number in getattr(self, 'watched_episodes', set()))
             row.add_suffix(watched_badge)
             row.set_activatable(True)
             row.connect('activated', lambda *_args, episode=number: self.search_episode(episode))
             self.episode_list.append(row)
             self.episode_rows.append((number, row))
             self.episode_watched_badges[number] = watched_badge
-        self.episode_search.set_text('')
+        self.episode_rendered_count = end
+        return False
 
     def refresh_watched_episodes(self):
         anime_id = (self.current_anime or {}).get('id')
         watched = watch_progress.watched_episodes(anime_id)
+        self.watched_episodes = watched
         for number, badge in getattr(self, 'episode_watched_badges', {}).items():
             badge.set_visible(number in watched)
         for number, badges in getattr(self, 'batch_watched_badges', {}).items():
@@ -363,8 +422,19 @@ class DetailUI:
 
     def filter_episodes(self, *_args):
         query = self.episode_search.get_text().strip().lower()
-        for number, row in self.episode_rows:
-            row.set_visible(not query or query in str(number) or f'{number:02d}' in query)
+        self.episode_filter_query = query
+        self.episode_filtered_numbers = (
+            range(1, self.episode_count + 1) if not query else
+            [number for number in range(1, self.episode_count + 1)
+             if query in str(number) or query in f'{number:02d}' or
+             query in self.current_episode_titles.get(number, '').lower()]
+        )
+        self.clear_list(self.episode_list)
+        self.episode_scroll.get_vadjustment().set_value(0)
+        self.episode_rows = []
+        self.episode_watched_badges = {}
+        self.episode_rendered_count = 0
+        self.load_more_episodes()
 
     def anime_view_changed(self, *_args):
         if (self.anime_tabs.get_visible_child_name() == 'batches' and
