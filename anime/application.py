@@ -25,6 +25,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
     def __init__(self, smoke=False):
         Adw.Application.__init__(self, application_id='io.github.desenrolado_s.AnimeNyaa')
         self.smoke = smoke
+        self.smoke_error = None
         self.results = []
         self.current_anime = None
         self.busy = False
@@ -49,6 +50,35 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         if icon_directory not in search_path:
             icon_theme.set_search_path([icon_directory, *search_path])
 
+    def _bundled_icon_smoke_error(self):
+        bundle = getattr(sys, '_MEIPASS', None)
+        if not bundle:
+            return None
+
+        icon_directory = os.path.join(bundle, 'share', 'icons')
+        theme = Gtk.IconTheme.new()
+        icon_names = (
+            'starred-symbolic',
+            'view-grid-symbolic',
+            'document-open-recent-symbolic',
+            'anime-nyaa',
+            'io.github.desenrolado_s.AnimeNyaa',
+        )
+        missing = []
+        bundled_root = os.path.realpath(icon_directory) + os.sep
+        theme.set_search_path([icon_directory])
+        theme.set_theme_name('anime-nyaa-smoke-missing-theme')
+        for icon_name in icon_names:
+            paintable = theme.lookup_icon(
+                icon_name, [], 16, 1, Gtk.TextDirection.NONE,
+                Gtk.IconLookupFlags.FORCE_REGULAR,
+            )
+            icon_file = paintable.get_file()
+            icon_path = os.path.realpath(icon_file.get_path()) if icon_file else ''
+            if not icon_path.startswith(bundled_root):
+                missing.append(icon_name)
+        return ', '.join(missing) if missing else None
+
     def do_activate(self):
         if getattr(self, 'window', None):
             self.window.present()
@@ -56,6 +86,11 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         display = Gdk.Display.get_default()
         if display is not None:
             self._configure_bundled_icon_fallback(display)
+            if self.smoke:
+                self.smoke_error = self._bundled_icon_smoke_error()
+                if self.smoke_error:
+                    GLib.idle_add(self.quit)
+                    return
         self.window = Adw.ApplicationWindow(application=self, title='にゃあ')
         self.window.set_default_size(1120, 800)
 
@@ -483,4 +518,9 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
 def main(argv=None):
     argv = list(sys.argv if argv is None else argv)
     Adw.init()
-    return AnimeApp(smoke='--smoke-test' in argv).run([argv[0]])
+    app = AnimeApp(smoke='--smoke-test' in argv)
+    status = app.run([argv[0]])
+    if app.smoke_error:
+        print(f'Bundled GTK icon smoke test failed: {app.smoke_error}', file=sys.stderr)
+        return 1
+    return status
