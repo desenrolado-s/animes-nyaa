@@ -102,6 +102,10 @@ class DetailUI:
         batch_nav.append(self.batch_episode_count)
         batch_episodes_page.append(batch_nav)
 
+        self.batch_episode_files = []
+        self.batch_filtered_files = []
+        self.batch_episode_filter_query = ''
+        self.batch_files_rendered = 0
         self.batch_episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar arquivos do batch…'))
         self.batch_episode_search.set_search_delay(120)
         self.batch_episode_search.connect('search-changed', self.filter_batch_episodes)
@@ -194,6 +198,11 @@ class DetailUI:
         heading.append(self.episode_count_label)
         panel.append(heading)
 
+        self.episode_count = 0
+        self.current_episode_titles = {}
+        self.episode_filter_query = ''
+        self.episode_filtered_numbers = []
+        self.episode_rendered_count = 0
         self.episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar episódios…'))
         self.episode_search.set_search_delay(120)
         self.episode_search.connect('search-changed', self.filter_episodes)
@@ -423,11 +432,13 @@ class DetailUI:
     def filter_episodes(self, *_args):
         query = self.episode_search.get_text().strip().lower()
         self.episode_filter_query = query
+        count = getattr(self, 'episode_count', 0)
+        titles = getattr(self, 'current_episode_titles', {})
         self.episode_filtered_numbers = (
-            range(1, self.episode_count + 1) if not query else
-            [number for number in range(1, self.episode_count + 1)
+            range(1, count + 1) if not query else
+            [number for number in range(1, count + 1)
              if query in str(number) or query in f'{number:02d}' or
-             query in self.current_episode_titles.get(number, '').lower()]
+             query in titles.get(number, '').lower()]
         )
         self.clear_list(self.episode_list)
         self.episode_scroll.get_vadjustment().set_value(0)

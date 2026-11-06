@@ -18,8 +18,9 @@ repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
 
 icon_directory="$destination/hicolor/symbolic/actions"
+app_icon_directory="$destination/hicolor/256x256/apps"
 license_directory="$(dirname "$(dirname "$destination")")/licenses"
-mkdir -p "$icon_directory" "$license_directory"
+mkdir -p "$icon_directory" "$app_icon_directory" "$license_directory"
 
 mapfile -t icon_names < <(
   grep -REho --include='*.py' "['\"][[:alnum:]-]+-symbolic['\"]" anime \
@@ -40,12 +41,16 @@ for icon_name in "${icon_names[@]}"; do
   install -m 0644 "$source_icon" "$icon_directory/$icon_name.svg"
 done
 
+install -m 0644 packaging/linux/anime-nyaa.png "$app_icon_directory/anime-nyaa.png"
+install -m 0644 packaging/linux/anime-nyaa.png \
+  "$app_icon_directory/io.github.desenrolado_s.AnimeNyaa.png"
+
 cat > "$destination/hicolor/index.theme" <<'EOF'
 [Icon Theme]
 Name=Hicolor
 Comment=Fallback icons bundled with Anime Nyaa
 Hidden=true
-Directories=symbolic/actions
+Directories=symbolic/actions,256x256/apps
 
 [symbolic/actions]
 Size=16
@@ -53,6 +58,11 @@ MinSize=8
 MaxSize=512
 Type=Scalable
 Context=Actions
+
+[256x256/apps]
+Size=256
+Type=Fixed
+Context=Applications
 EOF
 
 cp "$copyright_file" "$license_directory/adwaita-icon-theme.copyright"

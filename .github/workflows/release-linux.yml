@@ -109,7 +109,8 @@ jobs:
           find dist/anime-nyaa \( -name 'libmount.so*' -o -name 'libblkid.so*' -o -name 'libsystemd.so*' \) -delete
           rm -rf dist/anime-nyaa/_internal/gio_modules dist/anime-nyaa/gio_modules
           rm -rf dist/anime-nyaa/_internal/share/glib-2.0/schemas
-          # Keep only the symbolic icons used by the UI as a fallback for host themes.
+          bash scripts/remove-bundled-gtk-libs.sh dist/anime-nyaa/_internal
+          # Keep UI symbols and app icons available when the host theme lacks them.
           bash scripts/bundle-gtk-icons.sh dist/anime-nyaa/_internal/share/icons
           bash scripts/bundle-ca-certificates.sh dist/anime-nyaa/_internal/certs
           bash scripts/bundle-gtk-typelibs.sh dist/anime-nyaa/_internal/gi_typelibs
@@ -125,7 +126,7 @@ jobs:
           Run ./anime-nyaa to start the application.
           System requirements: Linux x86_64, GTK 4, Libadwaita and mpv.
           Node.js and WebTorrent CLI are included in the bundle.
-          A small Adwaita icon fallback is included; its copyright and license are in _internal/licenses.
+          A small icon fallback is included; Adwaita icon copyright and license are in _internal/licenses.
           EOF
       - name: Verify bundled Node.js and WebTorrent CLI
         run: |
@@ -146,7 +147,14 @@ jobs:
           NO_AT_BRIDGE: '1'
           GTK_A11Y: none
           GSK_RENDERER: cairo
-        run: dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test
+        run: |
+          set -o pipefail
+          dbus-run-session -- xvfb-run -a dist/anime-nyaa/anime-nyaa --smoke-test 2>&1 \
+            | tee /tmp/anime-nyaa-bundle-smoke.log
+          if grep -q 'Traceback (most recent call last):' /tmp/anime-nyaa-bundle-smoke.log; then
+            echo 'The packaged GTK startup logged a Python traceback.' >&2
+            exit 1
+          fi
       - name: Build Linux AppImage
         env:
           APPIMAGE_VERSION: ${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}
@@ -159,7 +167,14 @@ jobs:
           NO_AT_BRIDGE: '1'
           GTK_A11Y: none
           GSK_RENDERER: cairo
-        run: dbus-run-session -- xvfb-run -a dist/anime-nyaa-linux-x86_64-v${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}.AppImage --appimage-extract-and-run --smoke-test
+        run: |
+          set -o pipefail
+          dbus-run-session -- xvfb-run -a dist/anime-nyaa-linux-x86_64-v${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}.AppImage --appimage-extract-and-run --smoke-test 2>&1 \
+            | tee /tmp/anime-nyaa-appimage-smoke.log
+          if grep -q 'Traceback (most recent call last):' /tmp/anime-nyaa-appimage-smoke.log; then
+            echo 'The AppImage startup logged a Python traceback.' >&2
+            exit 1
+          fi
       - name: Archive executable bundle
         env:
           RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}

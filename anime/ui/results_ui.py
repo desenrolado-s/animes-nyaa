@@ -341,7 +341,8 @@ class ResultsUI:
     def filter_batch_episodes(self, *_args):
         query = self.batch_episode_search.get_text().strip().lower()
         self.batch_episode_filter_query = query
-        self.batch_filtered_files = [record for record in self.batch_episode_files
+        source_files = getattr(self, 'batch_episode_files', [])
+        self.batch_filtered_files = [record for record in source_files
                                      if not query or query in str(record[0]) or
                                      f'{record[0]:02d}' in query or query in record[1]]
         self.clear_list(self.batch_episode_list)
