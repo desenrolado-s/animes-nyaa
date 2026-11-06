@@ -3,7 +3,7 @@ a = Analysis(
     ['anime_app.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('anime/services/stream_episode.mjs', 'anime/services')],
     hiddenimports=[
         'gi.repository.Gtk',
         'gi.repository.Adw',

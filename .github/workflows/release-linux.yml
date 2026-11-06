@@ -130,8 +130,11 @@ jobs:
         run: |
           node=dist/anime-nyaa/_internal/node/bin/node
           cli=dist/anime-nyaa/_internal/webtorrent-cli/node_modules/webtorrent-cli/bin/cmd.js
+          helper=dist/anime-nyaa/_internal/anime/services/stream_episode.mjs
           "$node" --version
           "$node" "$cli" --help >/dev/null
+          test -s "$helper"
+          "$node" --check "$helper"
           (cd dist/anime-nyaa/_internal/webtorrent-cli && \
             "$GITHUB_WORKSPACE/dist/anime-nyaa/_internal/node/bin/node" \
               --input-type=module -e "import('node-datachannel')")
