@@ -4,6 +4,12 @@ import sys
 
 bundle = getattr(sys, '_MEIPASS', None)
 if bundle:
+    icon_data_dir = os.path.join(bundle, 'share')
+    bundled_icon_theme = os.path.join(icon_data_dir, 'icons', 'hicolor', 'index.theme')
+    if os.path.isfile(bundled_icon_theme):
+        data_dirs = os.environ.get('XDG_DATA_DIRS') or '/usr/local/share:/usr/share'
+        os.environ['XDG_DATA_DIRS'] = os.pathsep.join((icon_data_dir, data_dirs))
+
     bundled_paths = (
         os.path.join(bundle, 'node', 'bin'),
         os.path.join(bundle, 'webtorrent-cli', 'node_modules', '.bin'),
