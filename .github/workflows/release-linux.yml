@@ -165,7 +165,11 @@ jobs:
 
   release:
     needs: [reserve-version, build]
-    if: github.ref == 'refs/heads/main' && needs.reserve-version.result == 'success' && needs.build.result == 'success'
+    if: >-
+      !cancelled() &&
+      github.ref == 'refs/heads/main' &&
+      needs.reserve-version.result == 'success' &&
+      needs.build.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
