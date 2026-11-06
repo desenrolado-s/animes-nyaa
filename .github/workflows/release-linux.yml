@@ -184,10 +184,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.reserve-version.outputs.tag }}
         run: |
+          assets=(
+            release-assets/anime-nyaa-linux-x86_64-*.AppImage*
+            release-assets/anime-nyaa-*.tar.gz
+            release-assets/SHA256SUMS.txt
+          )
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$RELEASE_TAG" release-assets/* \
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
               --title "Anime Nyaa $RELEASE_TAG" \
