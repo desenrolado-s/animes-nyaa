@@ -10,7 +10,7 @@ App desktop GTK 4 que usa o catálogo público do AniList para descobrir animes,
 - Linux com GTK 4, Libadwaita e PyGObject
 - Python 3
 - mpv
-- Node.js/npm e WebTorrent CLI (`npm install --global webtorrent-cli`)
+- Node.js/npm e WebTorrent CLI (`npm install --global webtorrent-cli`) para executar direto do código-fonte
 
 No Debian/Ubuntu, as dependências do sistema podem ser instaladas com:
 
@@ -25,7 +25,7 @@ npm install --global webtorrent-cli
 ./anime-nyaa
 ```
 
-As versões Linux publicadas incluem um AppImage, um pacote executável `.tar.gz`, um arquivo com o código-fonte, metadados `.zsync` para atualização incremental e `SHA256SUMS.txt`. Para usar o AppImage, baixe-o, torne-o executável com `chmod +x anime-nyaa-linux-x86_64-v*.AppImage` e abra-o. No pacote `.tar.gz`, extraia a pasta e rode `./anime-nyaa`. GTK 4, Libadwaita, mpv, Node.js e WebTorrent CLI precisam estar instalados no sistema para o pacote `.tar.gz`; ambos os formatos incluem o interpretador Python e os módulos do aplicativo.
+As versões Linux publicadas incluem um AppImage, um pacote executável `.tar.gz`, um arquivo com o código-fonte, metadados `.zsync` para atualização incremental e `SHA256SUMS.txt`. Para usar o AppImage, baixe-o, torne-o executável com `chmod +x anime-nyaa-linux-x86_64-v*.AppImage` e abra-o. No pacote `.tar.gz`, extraia a pasta e rode `./anime-nyaa`. GTK 4, Libadwaita e mpv precisam estar instalados no sistema; os dois formatos incluem Python, Node.js, WebTorrent CLI e certificados CA.
 
 O AppImage inclui o endereço de atualização incremental; com o [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate), atualize os blocos alterados usando o arquivo `.zsync` publicado junto dele.
 
@@ -54,4 +54,4 @@ Capas são baixadas sob demanda e armazenadas em `~/.cache/anime-nyaa/covers/` p
 
 ## Releases
 
-Cada push na branch `main` executa os testes, compila o aplicativo GTK para Linux x86_64 com PyInstaller e publica uma GitHub Release com AppImage, pacote `.tar.gz`, código-fonte, atualização `.zsync` e checksums SHA-256. A versão é incrementada automaticamente a partir das tags existentes (`v1.0.0` → `v1.0.1`); os pacotes incluem a tag no nome. O build reserva uma tag por push e executa smoke tests no bundle e no AppImage antes da publicação.
+Cada push na branch `main` executa os testes, compila o aplicativo GTK para Linux x86_64 com PyInstaller e publica uma GitHub Release com AppImage, pacote `.tar.gz`, código-fonte, atualização `.zsync` e checksums SHA-256. Pushes e pull requests para `dev` também executam os testes, o build e os smoke tests, sem publicar release. A versão é incrementada automaticamente a partir das tags existentes (`v1.0.0` → `v1.0.1`); os pacotes incluem a tag no nome. O build reserva uma tag por push na `main` e executa smoke tests no bundle e no AppImage antes da publicação.

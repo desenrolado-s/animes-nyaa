@@ -2,16 +2,16 @@ name: Build and release Linux app
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 permissions:
   contents: read
 
 jobs:
   version:
-    if: github.event_name == 'pull_request'
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -113,6 +113,7 @@ jobs:
           rm -rf dist/anime-nyaa/_internal/share/icons
           bash scripts/bundle-ca-certificates.sh dist/anime-nyaa/_internal/certs
           bash scripts/bundle-gtk-typelibs.sh dist/anime-nyaa/_internal/gi_typelibs
+          bash scripts/bundle-node-webtorrent.sh dist/anime-nyaa/_internal
           mkdir -p dist/anime-nyaa
           release_version='${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}'
           sed -e "s|@APPIMAGE_VERSION@|${release_version}|" \
@@ -122,9 +123,18 @@ jobs:
           Anime Nyaa executable bundle
 
           Run ./anime-nyaa to start the application.
-          System requirements: Linux x86_64, GTK 4, Libadwaita, mpv,
-          Node.js and WebTorrent CLI.
+          System requirements: Linux x86_64, GTK 4, Libadwaita and mpv.
+          Node.js and WebTorrent CLI are included in the bundle.
           EOF
+      - name: Verify bundled Node.js and WebTorrent CLI
+        run: |
+          node=dist/anime-nyaa/_internal/node/bin/node
+          cli=dist/anime-nyaa/_internal/webtorrent-cli/node_modules/webtorrent-cli/bin/cmd.js
+          "$node" --version
+          "$node" "$cli" --help >/dev/null
+          (cd dist/anime-nyaa/_internal/webtorrent-cli && \
+            "$GITHUB_WORKSPACE/dist/anime-nyaa/_internal/node/bin/node" \
+              --input-type=module -e "import('node-datachannel')")
       - name: Smoke test packaged GTK app
         timeout-minutes: 3
         env:

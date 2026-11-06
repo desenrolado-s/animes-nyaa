@@ -1,0 +1,17 @@
+{
+  "name": "anime-nyaa-runtime-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned Node.js CLI runtime dependencies for Anime Nyaa release bundles",
+  "allowScripts": {
+    "bufferutil@4.1.0": false,
+    "ip-set@3.0.0": false,
+    "node-datachannel@0.32.3": true,
+    "protobufjs@6.11.6": false,
+    "utf-8-validate@6.0.6": false,
+    "utp-native@2.5.3": false
+  },
+  "dependencies": {
+    "webtorrent-cli": "6.0.1"
+  }
+}

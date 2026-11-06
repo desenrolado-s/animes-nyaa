@@ -12,7 +12,10 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={'gi': {'icons': [], 'themes': [], 'languages': []}},
-    runtime_hooks=['scripts/pyi_rth_ca_bundle.py'],
+    runtime_hooks=[
+        'scripts/pyi_rth_ca_bundle.py',
+        'scripts/pyi_rth_bundled_tools.py',
+    ],
     excludes=[],
     noarchive=False,
 )

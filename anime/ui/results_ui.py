@@ -1,4 +1,5 @@
 """Nyaa result lists, batch file browsing and mpv playback."""
+import os
 import shutil
 import subprocess
 import tempfile
@@ -352,8 +353,11 @@ class ResultsUI:
         webtorrent = shutil.which('webtorrent')
         node = shutil.which('node')
         mpv = shutil.which('mpv')
-        if not webtorrent or not node or not mpv:
-            self.show_notice('Instale Node.js, webtorrent-cli e mpv para reproduzir torrents.')
+        if not mpv:
+            self.show_notice('Instale o mpv para reproduzir torrents.')
+            return
+        if not webtorrent or not node:
+            self.show_notice('Node.js e WebTorrent CLI não foram encontrados. Reinstale o aplicativo.')
             return
         playback_directory = None
         try:
@@ -364,9 +368,19 @@ class ResultsUI:
             command = [node, str(helper), webtorrent, item['magnet'],
                        str(file_index) if file_index is not None else '-1',
                        str(playback_directory), mpv]
+            child_environment = os.environ.copy()
+            # PyInstaller prepends its private libraries for Python and GTK.
+            # External Node/npm native modules and the host mpv must use the
+            # distro libraries instead of incompatible bundled OpenSSL/libffi.
+            original_library_path = child_environment.pop('LD_LIBRARY_PATH_ORIG', None)
+            if original_library_path:
+                child_environment['LD_LIBRARY_PATH'] = original_library_path
+            else:
+                child_environment.pop('LD_LIBRARY_PATH', None)
             process = subprocess.Popen(
                 command, cwd=str(Path.home()), stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                env=child_environment,
                 start_new_session=True,
             )
         except (OSError, KeyError, ValueError) as exc:
