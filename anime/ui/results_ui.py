@@ -20,6 +20,10 @@ from .common import CATEGORY_CODES
 from .i18n import tr
 
 
+BATCH_ROW_RENDER_BATCH_SIZE = 30
+BATCH_FILE_RENDER_BATCH_SIZE = 40
+
+
 class ResultsUI:
     def build_results_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -217,7 +221,14 @@ class ResultsUI:
 
     def render_batch_rows(self):
         self.clear_batch_rows()
-        for item in self.batch_results:
+        self.batch_scroll.get_vadjustment().set_value(0)
+        self.batch_rows_rendered = 0
+        self.load_more_batch_rows()
+
+    def load_more_batch_rows(self):
+        start = getattr(self, 'batch_rows_rendered', 0)
+        end = min(start + BATCH_ROW_RENDER_BATCH_SIZE, len(self.batch_results))
+        for item in self.batch_results[start:end]:
             item['is_batch'] = True
             row = Adw.ActionRow(
                 title=item['title'] or tr('Batch sem título'),
@@ -232,6 +243,8 @@ class ResultsUI:
             row.add_suffix(favorite_button)
             row.add_suffix(self.button('Ver episódios', lambda selected=item: self.load_batch_episodes(selected)))
             self.batch_list.append(row)
+        self.batch_rows_rendered = end
+        return False
 
     def toggle_batch_favorite(self, item):
         library.toggle_favorite_batch(self.current_anime, item)
@@ -309,8 +322,41 @@ class ResultsUI:
         self.clear_list(self.batch_episode_list)
         self.batch_episode_rows = []
         self.batch_watched_badges = {}
+        self.batch_episode_files = []
         for position, file in enumerate(files, start=1):
             number = torrent.episode_number(file['name']) or position
+            self.batch_episode_files.append((number, file['name'].lower(), file))
+        self.batch_episode_filter_query = ''
+        self.batch_filtered_files = list(self.batch_episode_files)
+        self.batch_files_rendered = 0
+        self.batch_episode_scroll.get_vadjustment().set_value(0)
+        self.load_more_batch_episodes()
+        self.batch_episode_count.set_text(tr(f'{len(files)} episódios'))
+        self.batch_episode_search.set_text('')
+        self.batch_view.set_visible_child_name('episodes')
+        self.refresh_watched_episodes()
+        self.show_notice(tr(f'{len(files)} episódios encontrados dentro do batch.'))
+        return False
+
+    def filter_batch_episodes(self, *_args):
+        query = self.batch_episode_search.get_text().strip().lower()
+        self.batch_episode_filter_query = query
+        self.batch_filtered_files = [record for record in self.batch_episode_files
+                                     if not query or query in str(record[0]) or
+                                     f'{record[0]:02d}' in query or query in record[1]]
+        self.clear_list(self.batch_episode_list)
+        self.batch_episode_scroll.get_vadjustment().set_value(0)
+        self.batch_episode_rows = []
+        self.batch_watched_badges = {}
+        self.batch_files_rendered = 0
+        self.batch_episode_count.set_text(tr(f'{len(self.batch_filtered_files)} episódios'))
+        self.load_more_batch_episodes()
+
+    def load_more_batch_episodes(self):
+        start = getattr(self, 'batch_files_rendered', 0)
+        end = min(start + BATCH_FILE_RENDER_BATCH_SIZE, len(self.batch_filtered_files))
+        watched = getattr(self, 'watched_episodes', set())
+        for number, filename, file in self.batch_filtered_files[start:end]:
             row = Adw.ActionRow(title=self.episode_row_title(number),
                                 subtitle=f"{file['name']}  ·  {file['size']}")
             badge = Gtk.Label(label=f'{number:02d}')
@@ -325,24 +371,15 @@ class ResultsUI:
             watched_badge = Gtk.Label(label='✓')
             watched_badge.add_css_class('success')
             watched_badge.set_tooltip_text(tr('Assistido'))
-            watched_badge.set_visible(False)
+            watched_badge.set_visible(number in watched)
             row.add_suffix(watched_badge)
             row.set_activatable(True)
             row.connect('activated', lambda *_args, selected=file: self.play_batch_episode(selected))
             self.batch_episode_list.append(row)
-            self.batch_episode_rows.append((number, file['name'].lower(), row, file))
+            self.batch_episode_rows.append((number, filename, row, file))
             self.batch_watched_badges.setdefault(number, []).append(watched_badge)
-        self.batch_episode_count.set_text(tr(f'{len(files)} episódios'))
-        self.batch_episode_search.set_text('')
-        self.batch_view.set_visible_child_name('episodes')
-        self.refresh_watched_episodes()
-        self.show_notice(tr(f'{len(files)} episódios encontrados dentro do batch.'))
+        self.batch_files_rendered = end
         return False
-
-    def filter_batch_episodes(self, *_args):
-        query = self.batch_episode_search.get_text().strip().lower()
-        for number, filename, row, _file in self.batch_episode_rows:
-            row.set_visible(not query or query in str(number) or f'{number:02d}' in query or query in filename)
 
     def play_batch_episode(self, file):
         if getattr(self, 'selected_batch', None):
