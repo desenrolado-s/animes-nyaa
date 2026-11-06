@@ -28,8 +28,6 @@ find "$appdir" \( -name 'libmount.so*' -o -name 'libblkid.so*' \
   -o -name 'libsystemd.so*' \) -delete
 rm -rf "$appdir/usr/anime-nyaa/_internal/gio_modules" "$appdir/usr/anime-nyaa/gio_modules"
 rm -rf "$appdir/usr/anime-nyaa/_internal/share/glib-2.0/schemas"
-rm -rf "$appdir/usr/anime-nyaa/_internal/share/icons"
-
 sed -e "s|@APPIMAGE_VERSION@|${appimage_version}|" \
   -e "s|@APPIMAGE_ARCH@|${appimage_arch}|" \
   packaging/linux/anime-nyaa.desktop > "$appdir/anime-nyaa.desktop"
