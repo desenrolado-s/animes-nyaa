@@ -25,7 +25,8 @@ patterns = (
 )
 roots = {path for pattern in patterns for path in bundle.rglob(pattern)}
 if not roots:
-    raise SystemExit('No bundled GTK libraries were found to inspect.')
+    print('No bundled GTK libraries found; nothing to remove.')
+    raise SystemExit(0)
 
 env = os.environ.copy()
 existing_library_path = env.get('LD_LIBRARY_PATH')
