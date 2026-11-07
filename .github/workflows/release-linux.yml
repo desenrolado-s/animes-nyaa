@@ -155,6 +155,10 @@ jobs:
             echo 'The packaged GTK startup logged a Python traceback.' >&2
             exit 1
           fi
+          if grep -Eq 'AdwActionRow .* placed into GtkBox' /tmp/anime-nyaa-bundle-smoke.log; then
+            echo 'The packaged GTK app placed an Adw.ActionRow into an unsupported GtkBox.' >&2
+            exit 1
+          fi
       - name: Build Linux AppImage
         env:
           APPIMAGE_VERSION: ${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}
@@ -173,6 +177,10 @@ jobs:
             | tee /tmp/anime-nyaa-appimage-smoke.log
           if grep -q 'Traceback (most recent call last):' /tmp/anime-nyaa-appimage-smoke.log; then
             echo 'The AppImage startup logged a Python traceback.' >&2
+            exit 1
+          fi
+          if grep -Eq 'AdwActionRow .* placed into GtkBox' /tmp/anime-nyaa-appimage-smoke.log; then
+            echo 'The AppImage placed an Adw.ActionRow into an unsupported GtkBox.' >&2
             exit 1
           fi
       - name: Archive executable bundle
