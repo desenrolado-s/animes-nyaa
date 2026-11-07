@@ -135,3 +135,17 @@ class DetailLayoutTests(unittest.TestCase):
 
         self.app.update_search_trace('')
         self.assertFalse(self.app.search_info_button.get_visible())
+
+    def test_playback_notification_card_has_proper_padding(self):
+        playback_card = self.app.playback_revealer.get_child()
+        self.assertIsNotNone(playback_card)
+        self.assertTrue(playback_card.has_css_class('card'))
+
+        playback_content = playback_card.get_first_child()
+        self.assertIsNotNone(playback_content)
+        self.assertGreaterEqual(playback_content.get_margin_top(), 10)
+        self.assertGreaterEqual(playback_content.get_margin_bottom(), 10)
+        self.assertGreaterEqual(playback_content.get_margin_start(), 12)
+        self.assertGreaterEqual(playback_content.get_margin_end(), 12)
+        self.assertGreaterEqual(playback_content.get_spacing(), 12)
+
