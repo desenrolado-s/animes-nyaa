@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { realpathSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { createConnection } from 'node:net'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
@@ -16,8 +17,11 @@ if (!cliPath || !magnet || !Number.isInteger(index) || index < -1 || !outputPath
 }
 
 // Em Linux, caminhos de Unix domain sockets têm limite estrito de 108 bytes (sun_path).
-// Usar tmpdir() garante um caminho curto independente de onde outputPath estiver.
-const ipcSocketPath = join(tmpdir(), `nyaa-mpv-${process.pid}.sock`)
+// Usar tmpdir() com um token aleatório por sessão garante tamanho curto (<35 bytes),
+// unicidade por execução e previne conflitos caso um PID antigo seja reutilizado.
+const sessionToken = randomBytes(4).toString('hex')
+const ipcSocketPath = join(tmpdir(), `nyaa-mpv-${process.pid}-${sessionToken}.sock`)
+try { unlinkSync(ipcSocketPath) } catch {}
 
 const requireFromCli = createRequire(realpathSync(cliPath))
 const webtorrentModule = requireFromCli.resolve('webtorrent')
@@ -95,6 +99,7 @@ try {
 
   const url = `http://127.0.0.1:${server.address().port}${file.streamURL}`
 
+  try { unlinkSync(ipcSocketPath) } catch {}
   console.log('STATUS: Abrindo o reprodutor mpv…')
   player = spawn(mpvPath, [
     '--really-quiet',
