@@ -115,3 +115,12 @@ class DetailLayoutTests(unittest.TestCase):
         refreshed_row0 = self.app.episode_list.get_row_at_index(0)
         self.assertEqual(refreshed_row0.get_title(), 'Episódio 01')
         self.assertEqual(refreshed_row0.get_subtitle(), 'Asta & Yuno <Magic>')
+
+    def test_anime_overview_and_panels_have_proper_margins_and_padding(self):
+        self.assertGreater(self.app.anime_poster.get_margin_top(), 0)
+        episode_panel = self.app.episode_tab_stack.get_child_by_name('episodes')
+        self.assertGreaterEqual(episode_panel.get_margin_top(), 10)
+        self.assertGreaterEqual(episode_panel.get_margin_start(), 12)
+        batch_catalog = self.app.batch_view.get_child_by_name('catalog')
+        self.assertGreaterEqual(batch_catalog.get_margin_top(), 10)
+        self.assertGreaterEqual(batch_catalog.get_margin_start(), 12)

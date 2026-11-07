@@ -32,9 +32,14 @@ class _PlainText(HTMLParser):
 
 class DetailUI:
     def build_anime_page(self):
-        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        page.set_margin_bottom(6)
 
         nav = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
+        nav.set_margin_top(8)
+        nav.set_margin_bottom(2)
+        nav.set_margin_start(12)
+        nav.set_margin_end(12)
         back = Gtk.Button.new_from_icon_name('go-previous-symbolic')
         back.add_css_class('flat')
         back.set_tooltip_text(tr('Voltar ao catálogo'))
@@ -56,21 +61,26 @@ class DetailUI:
 
         self.batch_view = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
         batch_catalog_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        batch_catalog_page.set_margin_top(8)
-        batch_catalog_page.set_margin_bottom(8)
-        batch_catalog_page.set_margin_start(8)
-        batch_catalog_page.set_margin_end(8)
-        batch_search_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        batch_catalog_page.set_margin_top(10)
+        batch_catalog_page.set_margin_bottom(12)
+        batch_catalog_page.set_margin_start(14)
+        batch_catalog_page.set_margin_end(14)
+        batch_search_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         batch_search_card.add_css_class('card')
-        for side in ('top', 'bottom', 'start', 'end'):
-            getattr(batch_search_card, 'set_margin_' + side)(4)
+        batch_search_card.set_margin_bottom(6)
+
+        batch_search_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        batch_search_inner.set_margin_top(14)
+        batch_search_inner.set_margin_bottom(14)
+        batch_search_inner.set_margin_start(14)
+        batch_search_inner.set_margin_end(14)
 
         header_box = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
         header_box.append(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
         search_card_title = self.label(tr('Pesquisar batches no Nyaa'), 'caption-heading')
         search_card_title.set_hexpand(True)
         header_box.append(search_card_title)
-        batch_search_card.append(header_box)
+        batch_search_inner.append(header_box)
 
         batch_search_row = Gtk.Box(spacing=8)
         self.batch_search_query = Gtk.Entry(placeholder_text=tr('Consulta de batches no Nyaa'), hexpand=True)
@@ -80,21 +90,22 @@ class DetailUI:
         search_btn = self.button(tr('Buscar batches'), self.search_edited_batches)
         search_btn.add_css_class('suggested-action')
         batch_search_row.append(search_btn)
-        batch_search_card.append(batch_search_row)
+        batch_search_inner.append(batch_search_row)
 
         self.batch_search_extra = Gtk.Entry(placeholder_text=tr('Padrão adicional (opcional)'), hexpand=True)
         self.batch_search_extra.set_visible(False)
-        batch_search_card.append(self.batch_search_extra)
+        batch_search_inner.append(self.batch_search_extra)
 
         pattern_actions = Gtk.Box(spacing=8)
         pattern_btn = self.button(tr('＋ Adicionar padrão'), self.toggle_batch_pattern)
         pattern_btn.add_css_class('flat')
         pattern_actions.append(pattern_btn)
-        batch_search_card.append(pattern_actions)
+        batch_search_inner.append(pattern_actions)
 
         self.batch_search_trace = self.label('', 'dim-label')
         self.batch_search_trace.set_margin_start(4)
-        batch_search_card.append(self.batch_search_trace)
+        batch_search_inner.append(self.batch_search_trace)
+        batch_search_card.append(batch_search_inner)
         batch_catalog_page.append(batch_search_card)
 
         self.batch_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
@@ -111,12 +122,13 @@ class DetailUI:
         batch_catalog_page.append(self.batch_scroll)
         self.batch_view.add_named(batch_catalog_page, 'catalog')
 
-        batch_episodes_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        batch_episodes_page.set_margin_top(8)
-        batch_episodes_page.set_margin_bottom(8)
-        batch_episodes_page.set_margin_start(8)
-        batch_episodes_page.set_margin_end(8)
+        batch_episodes_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        batch_episodes_page.set_margin_top(10)
+        batch_episodes_page.set_margin_bottom(12)
+        batch_episodes_page.set_margin_start(14)
+        batch_episodes_page.set_margin_end(14)
         batch_nav = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        batch_nav.set_margin_bottom(2)
         back_to_batches = Gtk.Button.new_from_icon_name('go-previous-symbolic')
         back_to_batches.add_css_class('flat')
         back_to_batches.set_tooltip_text(tr('Voltar aos batches'))
@@ -138,6 +150,7 @@ class DetailUI:
         self.batch_files_rendered = 0
         self.batch_episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar arquivos do batch…'))
         self.batch_episode_search.set_search_delay(120)
+        self.batch_episode_search.set_margin_bottom(4)
         self.batch_episode_search.connect('search-changed', self.filter_batch_episodes)
         batch_episodes_page.append(self.batch_episode_search)
 
@@ -172,11 +185,11 @@ class DetailUI:
     def build_anime_overview(self):
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         panel.set_size_request(340, -1)
-        panel.set_margin_end(8)
         panel.add_css_class('card')
-        panel.set_margin_top(8)
-        panel.set_margin_bottom(8)
-        panel.set_margin_start(8)
+        panel.set_margin_top(10)
+        panel.set_margin_bottom(12)
+        panel.set_margin_start(14)
+        panel.set_margin_end(8)
 
         self.anime_poster = Gtk.Picture()
         self.anime_poster.set_size_request(180, 250)
@@ -184,13 +197,15 @@ class DetailUI:
         self.anime_poster.set_can_shrink(True)
         self.anime_poster.set_halign(Gtk.Align.CENTER)
         self.anime_poster.add_css_class('card')
-        self.anime_poster.set_margin_start(12)
-        self.anime_poster.set_margin_end(12)
+        self.anime_poster.set_margin_top(18)
+        self.anime_poster.set_margin_bottom(4)
+        self.anime_poster.set_margin_start(16)
+        self.anime_poster.set_margin_end(16)
         panel.append(self.anime_poster)
 
         self.anime_info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        self.anime_info.set_margin_top(14)
-        self.anime_info.set_margin_bottom(18)
+        self.anime_info.set_margin_top(8)
+        self.anime_info.set_margin_bottom(20)
         self.anime_info.set_margin_start(22)
         self.anime_info.set_margin_end(22)
         panel.append(self.anime_info)
@@ -228,12 +243,13 @@ class DetailUI:
 
     def build_episode_panel(self):
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        panel.set_margin_top(8)
-        panel.set_margin_bottom(8)
-        panel.set_margin_start(8)
-        panel.set_margin_end(8)
+        panel.set_margin_top(10)
+        panel.set_margin_bottom(12)
+        panel.set_margin_start(14)
+        panel.set_margin_end(14)
 
         heading = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        heading.set_margin_bottom(2)
         title = self.label('Episódios', 'title-2')
         title.set_hexpand(True)
         heading.append(title)
@@ -248,6 +264,7 @@ class DetailUI:
         self.episode_rendered_count = 0
         self.episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar episódios…'))
         self.episode_search.set_search_delay(120)
+        self.episode_search.set_margin_bottom(4)
         self.episode_search.connect('search-changed', self.filter_episodes)
         panel.append(self.episode_search)
 
