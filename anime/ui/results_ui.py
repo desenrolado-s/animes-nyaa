@@ -26,15 +26,6 @@ BATCH_FILE_RENDER_BATCH_SIZE = 40
 ACTIVE_PLAYBACK_DIRECTORIES = set()
 
 
-def _cleanup_active_playback_directories():
-    for directory in list(ACTIVE_PLAYBACK_DIRECTORIES):
-        shutil.rmtree(directory, ignore_errors=True)
-    ACTIVE_PLAYBACK_DIRECTORIES.clear()
-
-
-atexit.register(_cleanup_active_playback_directories)
-
-
 class ResultsUI:
     def build_results_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -471,6 +462,10 @@ class ResultsUI:
                 env=child_environment,
                 start_new_session=True,
             )
+            try:
+                (playback_directory / 'session.pid').write_text(str(process.pid), encoding='ascii')
+            except OSError:
+                pass
         except (OSError, KeyError, ValueError) as exc:
             if playback_directory is not None:
                 ACTIVE_PLAYBACK_DIRECTORIES.discard(playback_directory)

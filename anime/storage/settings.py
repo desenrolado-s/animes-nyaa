@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import time
 
 
 DEFAULT_TEMP_DIRECTORY = Path('/tmp')
@@ -24,22 +25,57 @@ def temporary_directory():
     return DEFAULT_TEMP_DIRECTORY
 
 
-def cleanup_temporary_directory(active_directories=None):
-    """Remove residual anime-nyaa-* temporary directories from storage folders."""
+def _is_process_alive(pid):
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def cleanup_temporary_directory(active_directories=None, min_age_seconds=300):
+    """Remove verified orphan anime-nyaa-* temporary directories from storage folders."""
     active = {str(Path(p).resolve()) for p in (active_directories or ())}
     target_dirs = {DEFAULT_TEMP_DIRECTORY, temporary_directory()}
+    now = time.time()
     for parent in target_dirs:
         try:
             if not parent.is_dir():
                 continue
             for item in parent.glob('anime-nyaa-*'):
                 try:
-                    if str(item.resolve()) in active:
+                    resolved = str(item.resolve())
+                    if resolved in active:
                         continue
-                    if item.is_dir():
-                        shutil.rmtree(item, ignore_errors=True)
-                    elif item.is_file():
-                        item.unlink(missing_ok=True)
+                    if not item.is_dir():
+                        if item.is_file():
+                            item.unlink(missing_ok=True)
+                        continue
+
+                    # If a session.pid file exists, only remove if the process is dead
+                    pid_file = item / 'session.pid'
+                    if pid_file.is_file():
+                        try:
+                            pid = int(pid_file.read_text(encoding='ascii').strip())
+                            if _is_process_alive(pid):
+                                continue
+                        except (ValueError, OSError):
+                            pass
+                    else:
+                        # Without a pid file, keep recent directories to avoid racing with startup
+                        try:
+                            if (now - item.stat().st_mtime) < min_age_seconds:
+                                continue
+                        except OSError:
+                            pass
+
+                    shutil.rmtree(item, ignore_errors=True)
                 except OSError:
                     pass
         except OSError:

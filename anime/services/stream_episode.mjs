@@ -12,6 +12,12 @@ if (!cliPath || !magnet || !Number.isInteger(index) || index < -1 || !outputPath
   process.exit(2)
 }
 
+try {
+  const { writeFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  writeFileSync(join(outputPath, 'session.pid'), String(process.pid))
+} catch {}
+
 const requireFromCli = createRequire(realpathSync(cliPath))
 const webtorrentModule = requireFromCli.resolve('webtorrent')
 const { default: WebTorrent } = await import(pathToFileURL(webtorrentModule).href)
