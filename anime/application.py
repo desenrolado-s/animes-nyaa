@@ -251,6 +251,8 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         body.append(self.main_overlay)
 
         self.window.present()
+        if not self.smoke:
+            threading.Thread(target=settings.cleanup_temporary_directory, daemon=True).start()
         if self.smoke:
             GLib.timeout_add(300, lambda: (self.quit(), False)[1])
         else:
@@ -549,6 +551,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
                 try:
                     settings.set_temporary_directory(path)
                     row.set_subtitle(str(settings.temporary_directory()))
+                    threading.Thread(target=settings.cleanup_temporary_directory, daemon=True).start()
                 except OSError as error:
                     self.show_notice(tr(f'Não foi possível salvar a pasta: {error}'))
         chooser.destroy()
@@ -558,6 +561,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         try:
             settings.set_temporary_directory(None)
             row.set_subtitle(str(settings.temporary_directory()))
+            threading.Thread(target=settings.cleanup_temporary_directory, daemon=True).start()
         except OSError as error:
             self.show_notice(tr(f'Não foi possível restaurar /tmp: {error}'))
 

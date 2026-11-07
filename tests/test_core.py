@@ -1,5 +1,7 @@
 """Offline tests for the application's parsing and local persistence."""
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -58,6 +60,34 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(settings.lastfm_credentials()['username'], 'listener')
         self.assertFalse(settings.lastfm_credentials()['enabled'])
         self.assertEqual(settings.settings_path().stat().st_mode & 0o777, 0o600)
+
+    def test_cleanup_temporary_directory_removes_stale_folders(self):
+        custom_dir = self.home / 'custom_downloads'
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        settings.set_temporary_directory(str(custom_dir))
+
+        # 1. Directory with dead PID -> should be removed
+        dead_dir = custom_dir / 'anime-nyaa-dead'
+        dead_dir.mkdir(parents=True, exist_ok=True)
+        (dead_dir / 'session.pid').write_text('999999')
+
+        # 2. Directory with active PID (current test process) -> must be preserved
+        live_dir = custom_dir / 'anime-nyaa-live'
+        live_dir.mkdir(parents=True, exist_ok=True)
+        (live_dir / 'session.pid').write_text(str(os.getpid()))
+
+        # 3. Old directory without PID -> should be removed
+        stale_dir = custom_dir / 'anime-nyaa-stale123'
+        stale_dir.mkdir(parents=True, exist_ok=True)
+        (stale_dir / 'sample.mkv').write_text('dummy')
+
+        # Patch time so stale_dir exceeds min_age_seconds
+        with patch('time.time', return_value=time.time() + 1000):
+            settings.cleanup_temporary_directory(min_age_seconds=300)
+
+        self.assertFalse(dead_dir.exists())
+        self.assertFalse(stale_dir.exists())
+        self.assertTrue(live_dir.exists())
 
     def test_watch_progress_and_history_round_trip(self):
         self.assertTrue(watch_progress.mark_watched(12, 4))
