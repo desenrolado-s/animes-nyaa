@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module'
 import { realpathSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { createConnection } from 'node:net'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
@@ -14,7 +15,9 @@ if (!cliPath || !magnet || !Number.isInteger(index) || index < -1 || !outputPath
   process.exit(2)
 }
 
-const ipcSocketPath = join(outputPath, 'mpv.sock')
+// Em Linux, caminhos de Unix domain sockets têm limite estrito de 108 bytes (sun_path).
+// Usar tmpdir() garante um caminho curto independente de onde outputPath estiver.
+const ipcSocketPath = join(tmpdir(), `nyaa-mpv-${process.pid}.sock`)
 
 const requireFromCli = createRequire(realpathSync(cliPath))
 const webtorrentModule = requireFromCli.resolve('webtorrent')
