@@ -178,8 +178,24 @@ class ResultsUI:
         if mode == 'batch':
             return [[f'{title} {term}' for term in ('batch', 'complete', 'season')]
                     for title in anime_titles]
-        numbers = list(dict.fromkeys((f'{episode:02d}', str(episode))))
-        return [[f'{title} {number}' for number in numbers] for title in anime_titles]
+        number = int(episode)
+        padded = f'{number:02d}'
+        patterns = [
+            f'E0{number}S0{number}',
+            f'E{padded}S{padded}',
+            f'S{padded}E{padded}',
+            f'E{padded}',
+            f'EP{padded}',
+            f'EP {padded}',
+            f'Episode {padded}',
+            padded,
+            str(number),
+        ]
+        if number < 100:
+            three_digits = f'{number:03d}'
+            patterns.extend((f'E{three_digits}', f'EP{three_digits}', three_digits))
+        patterns = list(dict.fromkeys(patterns))
+        return [[f'{title} {pattern}' for pattern in patterns] for title in anime_titles]
 
     def category_changed(self, *_args):
         if not getattr(self, 'current_anime', None):
