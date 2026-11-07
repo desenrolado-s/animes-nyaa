@@ -116,6 +116,7 @@ _PT_TO_EN = {
     'Reproduzindo no mpv': 'Playing in mpv',
     'Reprodução concluída': 'Playback finished',
     'Reprodução cancelada.': 'Playback cancelled.',
+    'Fonte recomendada (grupo confiável)': 'Recommended source (trusted group)',
 }
 
 _PT_PATTERNS = (
