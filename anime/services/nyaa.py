@@ -67,6 +67,29 @@ def search(query, category='1_0', limit=50):
     return parser.rows[:limit]
 
 
+TRUSTED_GROUPS = ('erai-raws', 'feibanyama')
+_TRUSTED_GROUP_PATTERN = re.compile(
+    r'(?:^|[\[\(\s])(?:erai[ ._-]*raws|feibanyama)(?:[\]\)\s]|$)',
+    re.IGNORECASE,
+)
+
+
+def is_trusted_group(title):
+    """Check if the release title belongs to a trusted release group tag."""
+    if not title:
+        return False
+    return bool(_TRUSTED_GROUP_PATTERN.search(title))
+
+
+def sort_releases_by_trusted(rows):
+    """Sort releases keeping trusted groups at the top, preserving seeders/original order."""
+    def _rank(item):
+        title = item.get('title', '')
+        return (0 if is_trusted_group(title) else 1)
+
+    return sorted(rows, key=_rank)
+
+
 def is_batch_title(title):
     return bool(re.search(
         r'\b(batch|complete|season|collection|series\s+pack)\b|(?<!\d)\d{1,3}\s*[-~–]\s*\d{1,3}(?!\d)|\b\d{1,3}\s+episodes\b',
