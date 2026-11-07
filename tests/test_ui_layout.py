@@ -2,15 +2,20 @@
 import unittest
 from unittest.mock import patch
 
-import gi
-gi.require_version('Adw', '1')
-gi.require_version('Gtk', '4.0')
-from gi.repository import Adw, Gtk
+try:
+    import gi
+    gi.require_version('Adw', '1')
+    gi.require_version('Gtk', '4.0')
+    from gi.repository import Adw, Gdk, Gtk
+    HAS_GTK = bool(Gtk.init_check()) and Gdk.Display.get_default() is not None
+    if HAS_GTK:
+        Adw.init()
+        from anime.application import AnimeApp
+except (ImportError, ValueError, RuntimeError):
+    HAS_GTK = False
 
-Adw.init()
-from anime.application import AnimeApp
 
-
+@unittest.skipUnless(HAS_GTK, "GTK display is not available in headless offline test environment")
 class DetailLayoutTests(unittest.TestCase):
     def setUp(self):
         self.app = AnimeApp(smoke=True)
