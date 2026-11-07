@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from anime.services import lastfm, nyaa, torrent
 from anime.storage import history, lastfm_progress, settings, watch_progress
+from anime.ui.i18n import tr
 
 
 class SearchParsingTests(unittest.TestCase):
@@ -142,6 +143,53 @@ class LastFmTests(unittest.TestCase):
 
     def test_authorization_url_encodes_token(self):
         self.assertIn('token=a+b', lastfm.authorization_url('key', 'a b'))
+
+
+class PlaybackStatusTests(unittest.TestCase):
+    def test_status_translations(self):
+        settings.set_language('en')
+        self.assertEqual(tr('Cancelar reprodução'), 'Cancel playback')
+        self.assertEqual(tr('Conectando ao WebTorrent…'), 'Connecting to WebTorrent…')
+        self.assertEqual(tr('Conectando aos peers do torrent…'), 'Connecting to torrent peers…')
+        self.assertEqual(tr('Conectado a 5 peer(s)…'), 'Connected to 5 peer(s)…')
+        self.assertEqual(tr('Reproduzindo no mpv'), 'Playing in mpv')
+        self.assertEqual(tr('Reprodução cancelada.'), 'Playback cancelled.')
+        settings.set_language('pt')
+        self.assertEqual(tr('Cancelar reprodução'), 'Cancelar reprodução')
+
+    def test_session_isolation_ignores_stale_events(self):
+        from unittest.mock import MagicMock
+
+        class PlaybackSessionTracker:
+            def __init__(self):
+                self.current_playback_session_id = 2
+                self.playback_status_label = MagicMock()
+                self.playback_revealer = MagicMock()
+
+            def update_playback_status(self, status_text, is_playing=False, session_id=None):
+                if session_id is not None and session_id != self.current_playback_session_id:
+                    return False
+                self.playback_status_label.set_text(status_text)
+                return False
+
+            def dismiss_playback_status(self, session_id=None):
+                if session_id is not None and session_id != self.current_playback_session_id:
+                    return False
+                self.playback_revealer.set_reveal_child(False)
+                return False
+
+        tracker = PlaybackSessionTracker()
+        # Stale event and dismiss for session 1 should be ignored
+        tracker.update_playback_status('Old message', is_playing=False, session_id=1)
+        tracker.playback_status_label.set_text.assert_not_called()
+        tracker.dismiss_playback_status(session_id=1)
+        tracker.playback_revealer.set_reveal_child.assert_not_called()
+
+        # Current event and dismiss for session 2 should be applied
+        tracker.update_playback_status('New message', is_playing=False, session_id=2)
+        tracker.playback_status_label.set_text.assert_called_with('New message')
+        tracker.dismiss_playback_status(session_id=2)
+        tracker.playback_revealer.set_reveal_child.assert_called_with(False)
 
 
 if __name__ == '__main__':

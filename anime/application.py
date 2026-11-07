@@ -1,5 +1,6 @@
 """GTK application shell and composition of the UI components."""
 import os
+import signal
 import sys
 import threading
 import webbrowser
@@ -8,7 +9,8 @@ import gi
 gi.require_version('Adw', '1')
 gi.require_version('Gdk', '4.0')
 gi.require_version('Gtk', '4.0')
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk
+gi.require_version('Pango', '1.0')
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 from .services import lastfm
 from .storage import settings
@@ -34,6 +36,9 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.catalog_has_next = False
         self.search_mode = 'episode'
         self.active_query = ''
+        self.playback_session_counter = 0
+        self.current_playback_session_id = None
+        self.cancelled_playback_sessions = set()
 
     def _configure_bundled_icon_fallback(self, display):
         bundle = getattr(sys, '_MEIPASS', None)
@@ -203,6 +208,45 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         notice.append(notice_content)
         self.notification_revealer.set_child(notice)
         self.main_overlay.add_overlay(self.notification_revealer)
+        self.playback_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.SLIDE_UP,
+            transition_duration=200,
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.END,
+        )
+        self.playback_revealer.set_margin_bottom(24)
+        playback_card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        playback_card.add_css_class('card')
+        playback_card.set_size_request(460, -1)
+        for side in ('top', 'bottom', 'start', 'end'):
+            getattr(playback_card, 'set_margin_' + side)(10)
+
+        self.playback_spinner = Gtk.Spinner(width_request=24, height_request=24, valign=Gtk.Align.CENTER)
+        playback_card.append(self.playback_spinner)
+
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True, valign=Gtk.Align.CENTER)
+        self.playback_title_label = self.label('', 'heading')
+        self.playback_title_label.set_lines(1)
+        self.playback_title_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.playback_status_label = self.label('', 'dim-label')
+        self.playback_status_label.set_lines(1)
+        self.playback_status_label.set_ellipsize(Pango.EllipsizeMode.END)
+        info_box.append(self.playback_title_label)
+        info_box.append(self.playback_status_label)
+        playback_card.append(info_box)
+
+        self.playback_cancel_button = Gtk.Button.new_from_icon_name('process-stop-symbolic')
+        self.playback_cancel_button.add_css_class('flat')
+        self.playback_cancel_button.set_tooltip_text(tr('Cancelar reprodução'))
+        self.playback_cancel_button.set_valign(Gtk.Align.CENTER)
+        self.playback_cancel_button.connect('clicked', lambda *_: self.cancel_current_playback())
+        playback_card.append(self.playback_cancel_button)
+
+        self.playback_revealer.set_child(playback_card)
+        self.main_overlay.add_overlay(self.playback_revealer)
+        self.playback_process = None
+        self.playback_dismiss_timeout = 0
+
         self.notification_timeout = 0
         body.append(self.main_overlay)
 
@@ -227,6 +271,59 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         button.set_halign(Gtk.Align.FILL)
         button.connect('clicked', lambda *_args: callback())
         return button
+
+    def show_playback_status(self, title, status_text, process=None, session_id=None):
+        self.playback_process = process
+        self.current_playback_session_id = session_id
+        if getattr(self, 'playback_dismiss_timeout', 0):
+            GLib.source_remove(self.playback_dismiss_timeout)
+            self.playback_dismiss_timeout = 0
+        self.playback_title_label.set_text(title)
+        self.playback_status_label.set_text(status_text)
+        self.playback_spinner.set_visible(True)
+        self.playback_spinner.start()
+        self.playback_cancel_button.set_visible(True)
+        self.playback_revealer.set_reveal_child(True)
+
+    def update_playback_status(self, status_text, is_playing=False, session_id=None):
+        if session_id is not None and session_id != self.current_playback_session_id:
+            return False
+        self.playback_status_label.set_text(status_text)
+        if is_playing:
+            self.playback_spinner.stop()
+            self.playback_spinner.set_visible(False)
+            self.playback_cancel_button.set_visible(False)
+            if getattr(self, 'playback_dismiss_timeout', 0):
+                GLib.source_remove(self.playback_dismiss_timeout)
+            self.playback_dismiss_timeout = GLib.timeout_add_seconds(
+                4, lambda sid=session_id: (self.dismiss_playback_status(sid), False)[1]
+            )
+        return False
+
+    def dismiss_playback_status(self, session_id=None):
+        if session_id is not None and session_id != self.current_playback_session_id:
+            return False
+        self.playback_revealer.set_reveal_child(False)
+        self.playback_dismiss_timeout = 0
+        self.playback_process = None
+        return False
+
+    def cancel_current_playback(self):
+        proc = self.playback_process
+        session_id = self.current_playback_session_id
+        if session_id:
+            self.cancelled_playback_sessions.add(session_id)
+        self.playback_process = None
+        if proc:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except OSError:
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
+        self.dismiss_playback_status()
+        self.show_notice('Reprodução cancelada.')
 
     def show_settings(self):
         window = Adw.PreferencesWindow(transient_for=self.window, modal=True, title=tr('Configurações'))

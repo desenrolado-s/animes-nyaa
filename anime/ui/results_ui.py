@@ -515,11 +515,18 @@ class ResultsUI:
                 target=self.scrobble_episode_themes,
                 args=(anime_id, episode_number, anime_title, credentials, int(time.time())), daemon=True,
             ).start()
+        session_id = getattr(self, 'playback_session_counter', 0) + 1
+        self.playback_session_counter = session_id
+        self.current_playback_session_id = session_id
         threading.Thread(
             target=self.monitor_playback,
-            args=(process, file_name or item['title'], playback_directory), daemon=True,
+            args=(process, file_name or item['title'], playback_directory, session_id), daemon=True,
         ).start()
-        self.show_notice(tr(f'Abrindo no mpv: {file_name or item["title"]}'))
+        display_title = file_name or item.get('title', 'Anime')
+        if hasattr(self, 'show_playback_status'):
+            self.show_playback_status(display_title, tr('Conectando ao WebTorrent…'), process, session_id=session_id)
+        else:
+            self.show_notice(tr(f'Abrindo no mpv: {display_title}'))
 
     def scrobble_episode_themes(self, anime_id, episode_number, anime_title, credentials, timestamp):
         try:
@@ -540,13 +547,36 @@ class ResultsUI:
             lastfm_progress.release(anime_id, episode_number)
             GLib.idle_add(self.show_notice, tr(f'Falha ao enviar os temas ao Last.fm: {exc}'))
 
-    def monitor_playback(self, process, title, playback_directory=None):
+    def monitor_playback(self, process, title, playback_directory=None, session_id=None):
+        output_lines = []
         try:
-            output, _ = process.communicate()
-            if process.returncode:
-                details = (output or '').strip().splitlines()
-                reason = '\n'.join(details[-4:])[-500:] if details else tr(f'WebTorrent encerrou com código {process.returncode}.')
-                GLib.idle_add(self.show_notice, tr(f'Falha ao reproduzir {title}: {reason}'))
+            if process.stdout:
+                for line in iter(process.stdout.readline, ''):
+                    output_lines.append(line)
+                    line_clean = line.strip()
+                    if line_clean.startswith('STATUS:'):
+                        status = line_clean[len('STATUS:'):].strip()
+                        if status.startswith('PLAYING'):
+                            msg = status[len('PLAYING'):].strip() or tr('Reproduzindo no mpv')
+                            if hasattr(self, 'update_playback_status'):
+                                GLib.idle_add(self.update_playback_status, msg, True, session_id)
+                        else:
+                            if hasattr(self, 'update_playback_status'):
+                                GLib.idle_add(self.update_playback_status, tr(status), False, session_id)
+            process.wait()
+            cancelled = session_id in getattr(self, 'cancelled_playback_sessions', ())
+            if getattr(self, 'cancelled_playback_sessions', None) and session_id in self.cancelled_playback_sessions:
+                self.cancelled_playback_sessions.discard(session_id)
+            if process.returncode != 0:
+                if not cancelled:
+                    if hasattr(self, 'dismiss_playback_status'):
+                        GLib.idle_add(self.dismiss_playback_status, session_id)
+                    details = ''.join(output_lines).strip().splitlines()
+                    reason = '\n'.join(details[-4:])[-500:] if details else tr(f'WebTorrent encerrou com código {process.returncode}.')
+                    GLib.idle_add(self.show_notice, tr(f'Falha ao reproduzir {title}: {reason}'))
+            else:
+                if hasattr(self, 'update_playback_status'):
+                    GLib.idle_add(self.update_playback_status, tr('Reprodução concluída'), True, session_id)
         finally:
             if playback_directory is not None:
                 ACTIVE_PLAYBACK_DIRECTORIES.discard(playback_directory)
