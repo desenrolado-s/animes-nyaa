@@ -164,7 +164,6 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.stack.set_transition_duration(120)
         self.stack.add_named(self.build_catalog_page(), 'catalog')
         self.stack.add_named(self.build_anime_page(), 'anime')
-        self.stack.add_named(self.build_results_page(), 'results')
         self.stack.add_named(self.build_my_list_page(), 'my-list')
         self.stack.add_named(self.build_history_page(), 'history')
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, hexpand=True, vexpand=True)
@@ -215,14 +214,20 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
             valign=Gtk.Align.END,
         )
         self.playback_revealer.set_margin_bottom(24)
-        playback_card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.playback_revealer.set_margin_start(16)
+        self.playback_revealer.set_margin_end(16)
+        playback_card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         playback_card.add_css_class('card')
-        playback_card.set_size_request(460, -1)
-        for side in ('top', 'bottom', 'start', 'end'):
-            getattr(playback_card, 'set_margin_' + side)(10)
+        playback_card.set_size_request(520, -1)
+
+        playback_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        for side in ('top', 'bottom'):
+            getattr(playback_content, 'set_margin_' + side)(12)
+        for side in ('start', 'end'):
+            getattr(playback_content, 'set_margin_' + side)(16)
 
         self.playback_spinner = Gtk.Spinner(width_request=24, height_request=24, valign=Gtk.Align.CENTER)
-        playback_card.append(self.playback_spinner)
+        playback_content.append(self.playback_spinner)
 
         info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True, valign=Gtk.Align.CENTER)
         self.playback_title_label = self.label('', 'heading')
@@ -233,15 +238,16 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.playback_status_label.set_ellipsize(Pango.EllipsizeMode.END)
         info_box.append(self.playback_title_label)
         info_box.append(self.playback_status_label)
-        playback_card.append(info_box)
+        playback_content.append(info_box)
 
         self.playback_cancel_button = Gtk.Button.new_from_icon_name('process-stop-symbolic')
         self.playback_cancel_button.add_css_class('flat')
         self.playback_cancel_button.set_tooltip_text(tr('Cancelar reprodução'))
         self.playback_cancel_button.set_valign(Gtk.Align.CENTER)
         self.playback_cancel_button.connect('clicked', lambda *_: self.cancel_current_playback())
-        playback_card.append(self.playback_cancel_button)
+        playback_content.append(self.playback_cancel_button)
 
+        playback_card.append(playback_content)
         self.playback_revealer.set_child(playback_card)
         self.main_overlay.add_overlay(self.playback_revealer)
         self.playback_process = None

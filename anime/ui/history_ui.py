@@ -53,7 +53,10 @@ class HistoryUI:
             released = item.get('release') or ''
             watched = self.history_timestamp(item.get('watched_at', ''))
             details = '   ·   '.join(value for value in (episode, item.get('size', ''), watched) if value)
-            row = Adw.ActionRow(title=title, subtitle=details)
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(title)
+            row.set_subtitle(details)
             row.add_prefix(Gtk.Image.new_from_icon_name('media-playback-start-symbolic'))
             if released and released != episode:
                 row.set_tooltip_text(released)

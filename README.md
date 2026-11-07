@@ -1,57 +1,63 @@
 # Anime Nyaa
 
-App desktop GTK 4 que usa o catálogo público do AniList para descobrir animes, mostrar títulos e capas e buscar releases correspondentes no Nyaa. Os torrents são transmitidos pelo WebTorrent e abertos no mpv. O app também mantém histórico local e permite iniciar novamente um item do histórico.
+A GTK 4 desktop app to browse anime using AniList, find releases on Nyaa, and stream them via WebTorrent directly into mpv.
 
 <img width="1912" height="1027" alt="image" src="https://github.com/user-attachments/assets/2b2a4c60-21a2-45b9-9f4c-c48b2bcd39a2" />
 
+## Requirements
 
-## Requisitos
-
-- Linux com GTK 4, Libadwaita e PyGObject
+- Linux with GTK 4, Libadwaita, and PyGObject
 - Python 3
 - mpv
-- Node.js/npm e WebTorrent CLI (`npm install --global webtorrent-cli`) para executar direto do código-fonte
+- Node.js & npm (for WebTorrent CLI)
 
-No Debian/Ubuntu, as dependências do sistema podem ser instaladas com:
+### Install dependencies
 
+**Debian / Ubuntu:**
 ```sh
 sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 mpv nodejs npm
 npm install --global webtorrent-cli
 ```
 
-## Executar
+**Arch Linux:**
+```sh
+sudo pacman -S python-gobject gtk4 libadwaita mpv nodejs npm
+npm install --global webtorrent-cli
+```
+
+**Fedora:**
+```sh
+sudo dnf install python3-gobject gtk4 libadwaita mpv nodejs npm
+npm install --global webtorrent-cli
+```
+
+## Running
+
+Run directly from source:
 
 ```sh
 ./anime-nyaa
 ```
 
-As versões Linux publicadas incluem um AppImage, um pacote executável `.tar.gz`, um arquivo com o código-fonte, metadados `.zsync` para atualização incremental e `SHA256SUMS.txt`. Para usar o AppImage, baixe-o, torne-o executável com `chmod +x anime-nyaa-linux-x86_64-v*.AppImage` e abra-o. No pacote `.tar.gz`, extraia a pasta e rode `./anime-nyaa`. GTK 4, Libadwaita e mpv precisam estar instalados no sistema; os dois formatos incluem Python, Node.js, WebTorrent CLI e certificados CA.
+Pre-built binaries (AppImage and `.tar.gz`) are available on the [Releases](https://github.com/desenrolado-s/animes-nyaa/releases) page.
 
-O AppImage inclui o endereço de atualização incremental; com o [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate), atualize os blocos alterados usando o arquivo `.zsync` publicado junto dele.
+## Features
 
-Use a barra lateral para navegar pelo catálogo, pela **Minha lista** e pelo **Histórico**, ou para escolher a categoria dos torrents. Na ficha do anime, **Minha lista** salva ou remove o anime da sua lista pessoal. Cada episódio procura no Nyaa tanto pelo número com zero à esquerda (por exemplo, `01`) quanto sem ele (`1`); a consulta usada pode ser conferida e editada nos resultados, com um padrão adicional opcional. Na aba **Batches**, escolha um torrent para carregar os arquivos de vídeo que ele contém; cada episódio pode ser aberto individualmente no mpv. Use a estrela em um batch para mantê-lo no topo dos resultados daquele anime.
+- **AniList Catalog**: Browse trending, popular, and seasonal anime with cover art.
+- **Nyaa Search**: Automated episode and batch torrent search.
+- **Streaming**: Instant playback in mpv via WebTorrent CLI.
+- **Library & History**: Save favorites to "My List" and track watch progress locally.
+- **Last.fm Integration**: Optional scrobbling of openings and endings via AnimeThemes.
 
-Abra **Configurações** no botão de engrenagem para escolher a pasta usada pelo WebTorrent durante a reprodução e configurar a integração com o Last.fm. Para conectar, crie uma chave de API em [last.fm/api/account/create](https://www.last.fm/api/account/create), informe a chave e o segredo nas configurações, clique em **Autorizar** e conclua a conexão depois de aprovar o acesso no navegador. Na primeira reprodução de cada episódio, o app consulta os temas no AnimeThemes e envia a abertura e o encerramento ao Last.fm. Se o envio falhar, uma reprodução posterior tentará novamente; depois que o Last.fm aceitar os temas, o app não os envia de novo. As preferências e credenciais ficam em `~/.local/share/anime-nyaa/settings.json`. Se nenhuma pasta temporária for escolhida, os vídeos ficam em `/tmp`. Os dados de cada sessão são removidos quando o WebTorrent encerra.
+## Project Structure
 
-O histórico fica em `~/.local/share/anime-nyaa/history.json` e pode ser reproduzido, removido por item ou limpo pela página **Histórico**. Episódios iniciados para reprodução são marcados como assistidos, com o progresso salvo em `~/.local/share/anime-nyaa/watch-progress.json`. A lista pessoal e os batches favoritos ficam em `~/.local/share/anime-nyaa/library.json`.
+- `anime-nyaa`: Launcher script.
+- `anime_app.py`: Application entry point.
+- `anime/application.py`: Window setup and page routing.
+- `anime/ui/`: GTK views (catalog, details, history, settings).
+- `anime/services/`: AniList, Nyaa, torrent, and Last.fm integrations.
+- `anime/storage/`: Local cache and persistent state (`~/.local/share/anime-nyaa/`).
 
-## Adicionar ao menu de aplicativos
+## Contributing
 
-Adicione o diretório do projeto ao `PATH` (por exemplo, criando um link em `~/.local/bin`) e copie `packaging/linux/anime-nyaa.desktop` para `~/.local/share/applications/`.
-
-## Estrutura
-
-- `anime_app.py`: ponto de entrada GTK.
-- `anime/application.py`: inicialização da janela e composição dos componentes.
-- `anime/ui/`: páginas GTK do catálogo, ficha, resultados, histórico e lista pessoal, além de helpers compartilhados.
-- `anime/services/`: integração com AniList e Nyaa, identificação de títulos de episódios e operações de torrent.
-- `anime/storage/`: persistência do histórico e da lista pessoal, além das preferências locais.
-- `anime/application.py`: inicialização da janela e composição das páginas.
-- `anime_app.py`: ponto de entrada GTK.
-- `anime-nyaa`: lançador do app.
-
-Capas são baixadas sob demanda e armazenadas em `~/.cache/anime-nyaa/covers/` para reutilização offline.
-
-## Releases
-
-Cada push na branch `main` executa os testes, compila o aplicativo GTK para Linux x86_64 com PyInstaller e publica uma GitHub Release com AppImage, pacote `.tar.gz`, código-fonte, atualização `.zsync` e checksums SHA-256. Pushes e pull requests para `dev` também executam os testes, o build e os smoke tests, sem publicar release. A versão é incrementada automaticamente a partir das tags existentes (`v1.0.0` → `v1.0.1`); os pacotes incluem a tag no nome. O build reserva uma tag por push na `main` e executa smoke tests no bundle e no AppImage antes da publicação.
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a Pull Request. **Always use the `dev` branch.**

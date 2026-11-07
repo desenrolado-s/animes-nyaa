@@ -13,7 +13,8 @@ import webbrowser
 import gi
 gi.require_version('Adw', '1')
 gi.require_version('Gtk', '4.0')
-from gi.repository import Adw, GLib, Gtk
+gi.require_version('Pango', '1.0')
+from gi.repository import Adw, GLib, Gtk, Pango
 
 from ..services import anilist, lastfm, nyaa, torrent
 from ..storage import history, lastfm_progress, library, settings, watch_progress
@@ -29,42 +30,85 @@ ACTIVE_PLAYBACK_DIRECTORIES = set()
 class ResultsUI:
     def build_results_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        nav = Gtk.Box(spacing=10)
-        nav.append(self.button('← Episódios e batches', self.show_anime))
+        page.set_margin_top(10)
+        page.set_margin_bottom(12)
+        page.set_margin_start(14)
+        page.set_margin_end(14)
+        nav = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        nav.set_margin_bottom(2)
+        back_to_episodes = Gtk.Button.new_from_icon_name('go-previous-symbolic')
+        back_to_episodes.add_css_class('flat')
+        back_to_episodes.set_tooltip_text(tr('Voltar aos episódios'))
+        back_to_episodes.connect('clicked', lambda *_: self.show_anime())
+        nav.append(back_to_episodes)
         self.results_heading = self.label('')
         self.results_heading.add_css_class('title-2')
+        self.results_heading.set_hexpand(True)
+        self.results_heading.set_ellipsize(Pango.EllipsizeMode.END)
         nav.append(self.results_heading)
         page.append(nav)
 
-        search_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        search_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         search_card.add_css_class('card')
-        search_card.set_margin_top(4)
-        search_card.set_margin_bottom(4)
-        search_card.set_margin_start(4)
-        search_card.set_margin_end(4)
-        search_label = self.label('Consulta enviada ao Nyaa', 'caption-heading')
-        search_card.append(search_label)
+        search_card.set_margin_bottom(6)
+
+        search_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        search_inner.set_margin_top(14)
+        search_inner.set_margin_bottom(14)
+        search_inner.set_margin_start(14)
+        search_inner.set_margin_end(14)
+
+        header_box = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        search_label = self.label(tr('Consulta enviada ao Nyaa'), 'caption-heading')
+        search_label.set_hexpand(True)
+        header_box.append(search_label)
+
+        self.search_info_button = Gtk.MenuButton()
+        self.search_info_button.set_icon_name('dialog-information-symbolic')
+        self.search_info_button.add_css_class('flat')
+        self.search_info_button.set_tooltip_text(tr('Ver termos de busca alternativos'))
+        self.search_info_button.set_valign(Gtk.Align.CENTER)
+
+        search_popover = Gtk.Popover()
+        pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        pop_box.set_margin_top(10)
+        pop_box.set_margin_bottom(10)
+        pop_box.set_margin_start(12)
+        pop_box.set_margin_end(12)
+        pop_title = self.label(tr('Consultas enviadas ao Nyaa'), 'heading')
+        self.search_trace = self.label('', 'dim-label')
+        self.search_trace.set_wrap(True)
+        self.search_trace.set_max_width_chars(42)
+        pop_box.append(pop_title)
+        pop_box.append(self.search_trace)
+        search_popover.set_child(pop_box)
+        self.search_info_button.set_popover(search_popover)
+        self.search_info_button.set_visible(False)
+        header_box.append(self.search_info_button)
+        search_inner.append(header_box)
+
         query_row = Gtk.Box(spacing=8)
         self.release_query = Gtk.Entry(placeholder_text=tr('Termos usados na pesquisa'), hexpand=True)
         self.release_query.set_activates_default(True)
         self.release_query.connect('activate', lambda *_: self.search_edited_releases())
         query_row.append(self.release_query)
-        query_row.append(self.button('Pesquisar', self.search_edited_releases))
-        search_card.append(query_row)
-        self.search_trace = self.label('', 'dim-label')
-        self.search_trace.set_margin_start(4)
-        search_card.append(self.search_trace)
+        search_button = self.button(tr('Buscar'), self.search_edited_releases)
+        search_button.add_css_class('suggested-action')
+        query_row.append(search_button)
+        search_inner.append(query_row)
 
         self.extra_pattern_revealer = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.extra_pattern = Gtk.Entry(placeholder_text='E.g. 1080p, [Group], dual audio', hexpand=True)
         self.extra_pattern.set_tooltip_text(tr('Este termo será acrescentado à consulta principal.'))
         self.extra_pattern_revealer.set_child(self.extra_pattern)
-        search_card.append(self.extra_pattern_revealer)
+        search_inner.append(self.extra_pattern_revealer)
         pattern_actions = Gtk.Box(spacing=8)
         self.extra_pattern_button = self.button('＋ Adicionar padrão de pesquisa', self.toggle_extra_pattern)
         self.extra_pattern_button.add_css_class('flat')
         pattern_actions.append(self.extra_pattern_button)
-        search_card.append(pattern_actions)
+        search_inner.append(pattern_actions)
+
+        search_card.append(search_inner)
         page.append(search_card)
 
         self.results_count = self.label('Resultados encontrados', 'heading')
@@ -86,6 +130,11 @@ class ResultsUI:
         actions.append(self.button('Busca no Nyaa', self.open_page))
         page.append(actions)
         return page
+
+    def update_search_trace(self, text):
+        self.search_trace.set_text(text)
+        if hasattr(self, 'search_info_button'):
+            self.search_info_button.set_visible(bool(text.strip()))
 
     def toggle_extra_pattern(self):
         visible = not self.extra_pattern_revealer.get_reveal_child()
@@ -113,7 +162,7 @@ class ResultsUI:
         self.batch_results = library.favorite_batches(self.current_anime)
         self.render_batch_rows()
         count = len(self.batch_results)
-        self.batch_search_trace.set_text(
+        self.update_batch_search_trace(
             tr(f'{count} batches favoritos salvos. Clique em “Buscar batches” para atualizar.')
             if count else tr('Seus batches favoritos aparecerão aqui, mesmo antes de pesquisar.')
         )
@@ -141,10 +190,10 @@ class ResultsUI:
         editable_query = query if edited else (base_query_sets[0][0] if base_query_sets and base_query_sets[0] else query)
         if mode == 'batch':
             self.batch_search_query.set_text(editable_query)
-            self.batch_search_trace.set_text(tr('Consultas: ') + '  ·  '.join(display_queries))
+            self.update_batch_search_trace(tr('Consultas: ') + '  ·  '.join(display_queries))
         else:
             self.release_query.set_text(editable_query)
-            self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(display_queries))
+            self.update_search_trace(tr('Consultas: ') + '  ·  '.join(display_queries))
         self.active_search_query = display_queries[0] if display_queries else query
 
         def worker():
@@ -221,10 +270,17 @@ class ResultsUI:
         patterns = list(dict.fromkeys(patterns))
         return [[f'{title} {pattern}' for pattern in patterns] for title in anime_titles]
 
+    def is_results_active(self):
+        if getattr(self, 'episode_tab_stack', None):
+            return (self.stack.get_visible_child_name() == 'anime' and
+                    self.anime_tabs.get_visible_child_name() == 'episodes' and
+                    self.episode_tab_stack.get_visible_child_name() == 'results')
+        return self.stack.get_visible_child_name() == 'results'
+
     def category_changed(self, *_args):
         if not getattr(self, 'current_anime', None):
             return
-        if self.stack.get_visible_child_name() == 'results' and getattr(self, 'active_episode', None):
+        if self.is_results_active() and getattr(self, 'active_episode', None):
             if self.release_query.get_text().strip():
                 self.search_edited_releases()
             else:
@@ -245,7 +301,7 @@ class ResultsUI:
         merged = favorites + [item for item in rows if item.get('magnet') not in seen]
         self.batch_results = self.sort_batches_by_favorite(merged)
         if searched is not None:
-            self.batch_search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
+            self.update_batch_search_trace(tr('Consultas: ') + '  ·  '.join(searched))
         self.render_batch_rows()
         saved_count = len(favorites)
         if rows:
@@ -275,9 +331,11 @@ class ResultsUI:
         end = min(start + BATCH_ROW_RENDER_BATCH_SIZE, len(self.batch_results))
         for item in self.batch_results[start:end]:
             item['is_batch'] = True
-            row = Adw.ActionRow(
-                title=item['title'] or tr('Batch sem título'),
-                subtitle=f"{item['size']}   ·   ↑ {item['seeders']}   ·   ↓ {item['leechers']}   ·   {item['downloads']} downloads",
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(item.get('title') or tr('Batch sem título'))
+            row.set_subtitle(
+                f"{item['size']}   ·   ↑ {item['seeders']}   ·   ↓ {item['leechers']}   ·   {item['downloads']} downloads"
             )
             if nyaa.is_trusted_group(item.get('title', '')):
                 trusted_icon = Gtk.Image.new_from_icon_name('emblem-default-symbolic')
@@ -309,12 +367,15 @@ class ResultsUI:
         rows = nyaa.sort_releases_by_trusted(rows)
         self.results = rows
         if searched is not None:
-            self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
+            self.update_search_trace(tr('Consultas: ') + '  ·  '.join(searched))
         self.results_count.set_text(tr(f'{len(rows)} releases encontradas'))
         for item in rows:
             title = item['title'] or tr('Release sem título')
             meta = f"{item['size']}   ·   {item['downloads']} downloads"
-            row = Adw.ActionRow(title=title, subtitle=meta)
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(title)
+            row.set_subtitle(meta)
             seeders = Gtk.Label(label=f"↑ {item['seeders']}")
             seeders.add_css_class('success')
             seeders.add_css_class('numeric')
@@ -333,14 +394,16 @@ class ResultsUI:
             play.set_tooltip_text(tr('Reproduzir esta release'))
             play.connect('clicked', lambda *_args, selected=item: self.play_item(selected))
             row.add_suffix(play)
-            list_row = Gtk.ListBoxRow(child=row)
-            list_row.set_activatable(True)
-            list_row.connect('activate', lambda selected: self.release_list.select_row(selected))
-            self.release_list.append(list_row)
+            row.set_activatable(True)
+            self.release_list.append(row)
+        active_ep = getattr(self, 'active_episode', None)
         if rows:
-            self.show_notice(tr(f'{len(rows)} releases encontradas para o episódio {self.active_episode:02d}.'))
-        elif self.active_episode:
-            self.show_notice(tr(f'Nenhuma release individual encontrada para o episódio {self.active_episode:02d}. Confira a aba Batches.'))
+            if active_ep is not None:
+                self.show_notice(tr(f'{len(rows)} releases encontradas para o episódio {active_ep:02d}.'))
+            else:
+                self.show_notice(tr(f'{len(rows)} releases encontradas.'))
+        elif active_ep is not None:
+            self.show_notice(tr(f'Nenhuma release individual encontrada para o episódio {active_ep:02d}. Confira a aba Batches.'))
         else:
             self.show_notice('Nenhum torrent encontrado para esta busca.')
         return False
@@ -414,18 +477,21 @@ class ResultsUI:
         end = min(start + BATCH_FILE_RENDER_BATCH_SIZE, len(self.batch_filtered_files))
         watched = getattr(self, 'watched_episodes', set())
         for number, filename, file in self.batch_filtered_files[start:end]:
-            row = Adw.ActionRow(title=self.episode_row_title(number),
-                                subtitle=f"{file['name']}  ·  {file['size']}")
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(self.episode_row_title(number))
+            row.set_subtitle(f"{file['name']}  ·  {file['size']}")
             badge = Gtk.Label(label=f'{number:02d}')
             badge.add_css_class('numeric')
-            badge.add_css_class('dim-label')
+            badge.add_css_class('heading')
+            badge.set_size_request(28, -1)
             row.add_prefix(badge)
             play = Gtk.Button.new_from_icon_name('media-playback-start-symbolic')
-            play.add_css_class('flat')
+            play.add_css_class('suggested-action')
             play.set_tooltip_text(tr(f'Assistir episódio {number:02d}'))
             play.connect('clicked', lambda *_args, selected=file: self.play_batch_episode(selected))
             row.add_suffix(play)
-            watched_badge = Gtk.Label(label='✓')
+            watched_badge = Gtk.Image.new_from_icon_name('emblem-ok-symbolic')
             watched_badge.add_css_class('success')
             watched_badge.set_tooltip_text(tr('Assistido'))
             watched_badge.set_visible(number in watched)

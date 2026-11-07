@@ -32,9 +32,14 @@ class _PlainText(HTMLParser):
 
 class DetailUI:
     def build_anime_page(self):
-        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        page.set_margin_bottom(6)
 
         nav = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
+        nav.set_margin_top(8)
+        nav.set_margin_bottom(2)
+        nav.set_margin_start(12)
+        nav.set_margin_end(12)
         back = Gtk.Button.new_from_icon_name('go-previous-symbolic')
         back.add_css_class('flat')
         back.set_tooltip_text(tr('Voltar ao catálogo'))
@@ -49,38 +54,87 @@ class DetailUI:
         self.anime_tabs.connect('notify::visible-child-name', self.anime_view_changed)
         page.append(nav)
 
-        episode_page = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL, wide_handle=True,
-                                 vexpand=True, hexpand=True)
-        episode_page.set_position(390)
-        episode_page.set_start_child(self.build_anime_overview())
-        episode_page.set_end_child(self.build_episode_panel())
-        self.anime_tabs.add_titled(episode_page, 'episodes', tr('Episódios'))
+        self.episode_tab_stack = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
+        self.episode_tab_stack.add_named(self.build_episode_panel(), 'episodes')
+        self.episode_tab_stack.add_named(self.build_results_page(), 'results')
+        self.anime_tabs.add_titled(self.episode_tab_stack, 'episodes', tr('Episódios'))
 
         self.batch_view = Gtk.Stack(vexpand=True, transition_type=Gtk.StackTransitionType.CROSSFADE)
         batch_catalog_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        batch_catalog_page.set_margin_top(8)
-        batch_intro_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
-        batch_intro_list.add_css_class('boxed-list')
-        batch_intro = Adw.ActionRow(title=tr('Assistir um batch'),
-                                    subtitle=tr('Escolha um torrent para ver os episódios que ele contém.'))
-        batch_intro.add_prefix(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
-        batch_intro_list.append(batch_intro)
-        batch_catalog_page.append(batch_intro_list)
+        batch_catalog_page.set_margin_top(10)
+        batch_catalog_page.set_margin_bottom(12)
+        batch_catalog_page.set_margin_start(14)
+        batch_catalog_page.set_margin_end(14)
+        batch_search_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        batch_search_card.add_css_class('card')
+        batch_search_card.set_margin_bottom(6)
+
+        batch_search_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        batch_search_inner.set_margin_top(14)
+        batch_search_inner.set_margin_bottom(14)
+        batch_search_inner.set_margin_start(14)
+        batch_search_inner.set_margin_end(14)
+
+        header_box = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        header_box.append(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
+        search_card_title = self.label(tr('Pesquisar batches no Nyaa'), 'caption-heading')
+        search_card_title.set_hexpand(True)
+        header_box.append(search_card_title)
+
+        self.batch_search_info_button = Gtk.MenuButton()
+        self.batch_search_info_button.set_icon_name('dialog-information-symbolic')
+        self.batch_search_info_button.add_css_class('flat')
+        self.batch_search_info_button.set_tooltip_text(tr('Ver termos de busca alternativos'))
+        self.batch_search_info_button.set_valign(Gtk.Align.CENTER)
+
+        batch_popover = Gtk.Popover()
+        batch_pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        batch_pop_box.set_margin_top(10)
+        batch_pop_box.set_margin_bottom(10)
+        batch_pop_box.set_margin_start(12)
+        batch_pop_box.set_margin_end(12)
+        batch_pop_title = self.label(tr('Consultas de batches enviadas ao Nyaa'), 'heading')
+        self.batch_search_trace = self.label('', 'dim-label')
+        self.batch_search_trace.set_wrap(True)
+        self.batch_search_trace.set_max_width_chars(42)
+        batch_pop_box.append(batch_pop_title)
+        batch_pop_box.append(self.batch_search_trace)
+        batch_popover.set_child(batch_pop_box)
+        self.batch_search_info_button.set_popover(batch_popover)
+        self.batch_search_info_button.set_visible(False)
+        header_box.append(self.batch_search_info_button)
+        batch_search_inner.append(header_box)
+
+        batch_search_row = Gtk.Box(spacing=8)
         self.batch_search_query = Gtk.Entry(placeholder_text=tr('Consulta de batches no Nyaa'), hexpand=True)
+        self.batch_search_query.set_activates_default(True)
         self.batch_search_query.connect('activate', lambda *_: self.search_edited_batches())
-        batch_catalog_page.append(self.batch_search_query)
+        batch_search_row.append(self.batch_search_query)
+        search_btn = self.button(tr('Buscar batches'), self.search_edited_batches)
+        search_btn.add_css_class('suggested-action')
+        batch_search_row.append(search_btn)
+        batch_search_inner.append(batch_search_row)
+
         self.batch_search_extra = Gtk.Entry(placeholder_text=tr('Padrão adicional (opcional)'), hexpand=True)
         self.batch_search_extra.set_visible(False)
-        batch_catalog_page.append(self.batch_search_extra)
-        batch_search_actions = Gtk.Box(spacing=8)
-        batch_search_actions.append(self.button('＋ Adicionar padrão', self.toggle_batch_pattern))
-        batch_search_actions.append(self.button('Buscar batches', self.search_edited_batches))
-        batch_catalog_page.append(batch_search_actions)
-        self.batch_search_trace = self.label('', 'dim-label')
-        batch_catalog_page.append(self.batch_search_trace)
+        batch_search_inner.append(self.batch_search_extra)
+
+        pattern_actions = Gtk.Box(spacing=8)
+        pattern_btn = self.button(tr('＋ Adicionar padrão'), self.toggle_batch_pattern)
+        pattern_btn.add_css_class('flat')
+        pattern_actions.append(pattern_btn)
+        batch_search_inner.append(pattern_actions)
+
+        batch_search_card.append(batch_search_inner)
+        batch_catalog_page.append(batch_search_card)
+
         self.batch_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.batch_list.add_css_class('boxed-list')
-        self.batch_list.set_placeholder(self.label('Nenhum batch salvo ainda. Use Buscar batches para procurar releases.', 'dim-label'))
+        self.batch_list.set_placeholder(Adw.StatusPage(
+            icon_name='folder-videos-symbolic',
+            title=tr('Nenhum batch salvo ainda'),
+            description=tr('Use “Buscar batches” para procurar releases no Nyaa.'),
+        ))
         self.batch_scroll = Gtk.ScrolledWindow(vexpand=True)
         self.batch_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.batch_scroll.set_child(self.batch_list)
@@ -88,8 +142,13 @@ class DetailUI:
         batch_catalog_page.append(self.batch_scroll)
         self.batch_view.add_named(batch_catalog_page, 'catalog')
 
-        batch_episodes_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        batch_episodes_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        batch_episodes_page.set_margin_top(10)
+        batch_episodes_page.set_margin_bottom(12)
+        batch_episodes_page.set_margin_start(14)
+        batch_episodes_page.set_margin_end(14)
         batch_nav = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        batch_nav.set_margin_bottom(2)
         back_to_batches = Gtk.Button.new_from_icon_name('go-previous-symbolic')
         back_to_batches.add_css_class('flat')
         back_to_batches.set_tooltip_text(tr('Voltar aos batches'))
@@ -111,6 +170,7 @@ class DetailUI:
         self.batch_files_rendered = 0
         self.batch_episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar arquivos do batch…'))
         self.batch_episode_search.set_search_delay(120)
+        self.batch_episode_search.set_margin_bottom(4)
         self.batch_episode_search.connect('search-changed', self.filter_batch_episodes)
         batch_episodes_page.append(self.batch_episode_search)
 
@@ -130,17 +190,26 @@ class DetailUI:
         self.batch_view.add_named(batch_episodes_page, 'episodes')
         self.anime_tabs.add_titled(self.batch_view, 'batches', 'Batches')
 
-        page.append(self.anime_tabs)
+        anime_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL, wide_handle=True,
+                                vexpand=True, hexpand=True)
+        anime_paned.set_resize_start_child(False)
+        anime_paned.set_resize_end_child(True)
+        anime_paned.set_shrink_start_child(False)
+        anime_paned.set_position(390)
+        anime_paned.set_start_child(self.build_anime_overview())
+        anime_paned.set_end_child(self.anime_tabs)
+        self.anime_paned = anime_paned
+        page.append(anime_paned)
         return page
 
     def build_anime_overview(self):
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         panel.set_size_request(340, -1)
-        panel.set_margin_end(8)
         panel.add_css_class('card')
-        panel.set_margin_top(8)
-        panel.set_margin_bottom(8)
-        panel.set_margin_start(8)
+        panel.set_margin_top(10)
+        panel.set_margin_bottom(12)
+        panel.set_margin_start(14)
+        panel.set_margin_end(8)
 
         self.anime_poster = Gtk.Picture()
         self.anime_poster.set_size_request(180, 250)
@@ -148,13 +217,15 @@ class DetailUI:
         self.anime_poster.set_can_shrink(True)
         self.anime_poster.set_halign(Gtk.Align.CENTER)
         self.anime_poster.add_css_class('card')
-        self.anime_poster.set_margin_start(12)
-        self.anime_poster.set_margin_end(12)
+        self.anime_poster.set_margin_top(18)
+        self.anime_poster.set_margin_bottom(4)
+        self.anime_poster.set_margin_start(16)
+        self.anime_poster.set_margin_end(16)
         panel.append(self.anime_poster)
 
         self.anime_info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        self.anime_info.set_margin_top(14)
-        self.anime_info.set_margin_bottom(18)
+        self.anime_info.set_margin_top(8)
+        self.anime_info.set_margin_bottom(20)
         self.anime_info.set_margin_start(22)
         self.anime_info.set_margin_end(22)
         panel.append(self.anime_info)
@@ -184,16 +255,21 @@ class DetailUI:
         self.anime_summary.set_lines(4)
         self.anime_summary.set_ellipsize(Pango.EllipsizeMode.END)
         self.anime_info.append(self.anime_summary)
-        return panel
+
+        scroller = Gtk.ScrolledWindow(vexpand=True)
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_child(panel)
+        return scroller
 
     def build_episode_panel(self):
         panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        panel.set_margin_top(8)
-        panel.set_margin_bottom(8)
-        panel.set_margin_start(8)
-        panel.set_margin_end(8)
+        panel.set_margin_top(10)
+        panel.set_margin_bottom(12)
+        panel.set_margin_start(14)
+        panel.set_margin_end(14)
 
         heading = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        heading.set_margin_bottom(2)
         title = self.label('Episódios', 'title-2')
         title.set_hexpand(True)
         heading.append(title)
@@ -208,6 +284,7 @@ class DetailUI:
         self.episode_rendered_count = 0
         self.episode_search = Gtk.SearchEntry(placeholder_text=tr('Filtrar episódios…'))
         self.episode_search.set_search_delay(120)
+        self.episode_search.set_margin_bottom(4)
         self.episode_search.connect('search-changed', self.filter_episodes)
         panel.append(self.episode_search)
 
@@ -252,10 +329,12 @@ class DetailUI:
                                     tr('Sinopse indisponível.'))
         self.load_anime_poster(media)
 
+        if hasattr(self, 'episode_tab_stack'):
+            self.episode_tab_stack.set_visible_child_name('episodes')
         self.anime_tabs.set_visible_child_name('episodes')
         self.batch_view.set_visible_child_name('catalog')
         self.batch_search_query.set_text('')
-        self.batch_search_trace.set_text('')
+        self.update_batch_search_trace('')
         self.batch_search_performed = False
         self.populate_episodes(count)
         self.refresh_watched_episodes()
@@ -398,18 +477,22 @@ class DetailUI:
         start = self.episode_rendered_count
         end = min(start + EPISODE_RENDER_BATCH_SIZE, len(self.episode_filtered_numbers))
         for number in self.episode_filtered_numbers[start:end]:
-            row = Adw.ActionRow(title=self.episode_row_title(number),
-                                subtitle=tr('Pesquisar releases no Nyaa'))
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(tr(f'Episódio {number:02d}'))
+            title = self.current_episode_titles.get(number)
+            row.set_subtitle(title if title else tr('Pesquisar releases no Nyaa'))
             number_badge = Gtk.Label(label=f'{number:02d}')
             number_badge.add_css_class('numeric')
-            number_badge.add_css_class('dim-label')
+            number_badge.add_css_class('heading')
+            number_badge.set_size_request(28, -1)
             row.add_prefix(number_badge)
             search_button = Gtk.Button.new_from_icon_name('system-search-symbolic')
             search_button.add_css_class('flat')
             search_button.set_tooltip_text(tr(f'Pesquisar episódio {number:02d}'))
             search_button.connect('clicked', lambda *_args, episode=number: self.search_episode(episode))
             row.add_suffix(search_button)
-            watched_badge = Gtk.Label(label='✓')
+            watched_badge = Gtk.Image.new_from_icon_name('emblem-ok-symbolic')
             watched_badge.add_css_class('success')
             watched_badge.set_tooltip_text(tr('Assistido'))
             watched_badge.set_visible(number in getattr(self, 'watched_episodes', set()))
@@ -460,7 +543,10 @@ class DetailUI:
         self.active_episode = number
         self.active_query = f'{anilist.torrent_query(self.current_anime)} {number:02d}'
         self.results_heading.set_text(self.episode_row_title(number))
-        self.stack.set_visible_child_name('results')
+        if hasattr(self, 'episode_tab_stack'):
+            self.episode_tab_stack.set_visible_child_name('results')
+        self.anime_tabs.set_visible_child_name('episodes')
+        self.stack.set_visible_child_name('anime')
         self.search_releases(self.active_query, mode='episode', episode=number)
 
     def toggle_batch_pattern(self):
@@ -488,4 +574,11 @@ class DetailUI:
         self.search_batches(edited=bool(self.batch_search_query.get_text().strip()))
 
     def show_anime(self):
+        if hasattr(self, 'episode_tab_stack'):
+            self.episode_tab_stack.set_visible_child_name('episodes')
         self.stack.set_visible_child_name('anime')
+
+    def update_batch_search_trace(self, text):
+        self.batch_search_trace.set_text(text)
+        if hasattr(self, 'batch_search_info_button'):
+            self.batch_search_info_button.set_visible(bool(text.strip()))
