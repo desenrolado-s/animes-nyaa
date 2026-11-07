@@ -52,10 +52,12 @@ function waitFor(emitter, successEvent) {
 
 let player
 let ipcSocket
+let pollInterval
 let exitCode = 0
 
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.once(signal, async () => {
+    if (pollInterval) clearInterval(pollInterval)
     if (ipcSocket && !ipcSocket.destroyed) {
       ipcSocket.destroy()
     }
@@ -105,10 +107,39 @@ try {
   let playingEmitted = false
   let attempts = 0
   let ipcBuffer = ''
+
+  const markPlaying = () => {
+    if (playingEmitted) return
+    playingEmitted = true
+    if (pollInterval) clearInterval(pollInterval)
+    console.log('STATUS:PLAYING Reproduzindo no mpv')
+    if (ipcSocket && !ipcSocket.destroyed) {
+      ipcSocket.destroy()
+    }
+  }
+
+  const queryPlaybackState = () => {
+    if (ipcSocket && !ipcSocket.destroyed && !playingEmitted) {
+      try {
+        ipcSocket.write(JSON.stringify({ command: ['get_property', 'time-pos'] }) + '\n')
+        ipcSocket.write(JSON.stringify({ command: ['get_property', 'playback-time'] }) + '\n')
+      } catch {}
+    }
+  }
+
   const connectIpc = () => {
     attempts++
     ipcSocket = createConnection(ipcSocketPath)
     ipcSocket.on('connect', () => {
+      try {
+        ipcSocket.write(JSON.stringify({ command: ['observe_property', 1, 'time-pos'] }) + '\n')
+        ipcSocket.write(JSON.stringify({ command: ['observe_property', 2, 'playback-time'] }) + '\n')
+        queryPlaybackState()
+      } catch {}
+
+      if (pollInterval) clearInterval(pollInterval)
+      pollInterval = setInterval(queryPlaybackState, 200)
+
       ipcSocket.on('data', chunk => {
         ipcBuffer += chunk.toString('utf-8')
         let newlineIndex
@@ -122,6 +153,10 @@ try {
             const msg = JSON.parse(line)
             if (msg.event === 'playback-restart' || msg.event === 'file-loaded') {
               isMatch = true
+            } else if (msg.event === 'property-change' && (msg.name === 'time-pos' || msg.name === 'playback-time') && typeof msg.data === 'number') {
+              isMatch = true
+            } else if (msg.error === 'success' && typeof msg.data === 'number') {
+              isMatch = true
             }
           } catch {}
 
@@ -129,23 +164,22 @@ try {
             isMatch = true
           }
 
-          if (isMatch && !playingEmitted) {
-            playingEmitted = true
-            console.log('STATUS:PLAYING Reproduzindo no mpv')
-            ipcSocket.destroy()
+          if (isMatch) {
+            markPlaying()
             break
           }
         }
       })
     })
     ipcSocket.on('error', () => {
+      if (pollInterval) clearInterval(pollInterval)
       ipcSocket.destroy()
       if (!playingEmitted && attempts < 100 && player && player.exitCode === null) {
-        setTimeout(connectIpc, 100)
+        setTimeout(connectIpc, 50)
       }
     })
   }
-  setTimeout(connectIpc, 100)
+  setTimeout(connectIpc, 50)
 
   exitCode = await new Promise((resolve, reject) => {
     player.once('error', reject)
@@ -155,6 +189,7 @@ try {
   console.error(error?.stack || String(error))
   exitCode = 1
 } finally {
+  if (pollInterval) clearInterval(pollInterval)
   if (ipcSocket && !ipcSocket.destroyed) {
     ipcSocket.destroy()
   }
