@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { createRequire } from 'node:module'
-import { realpathSync } from 'node:fs'
+import { realpathSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
+import { createConnection } from 'node:net'
 import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 
@@ -11,6 +13,8 @@ if (!cliPath || !magnet || !Number.isInteger(index) || index < -1 || !outputPath
   console.error('Uso: stream_episode.mjs <webtorrent-cli> <magnet> <índice> <pasta> <mpv>')
   process.exit(2)
 }
+
+const ipcSocketPath = join(outputPath, 'mpv.sock')
 
 const requireFromCli = createRequire(realpathSync(cliPath))
 const webtorrentModule = requireFromCli.resolve('webtorrent')
@@ -44,10 +48,14 @@ function waitFor(emitter, successEvent) {
 }
 
 let player
+let ipcSocket
 let exitCode = 0
 
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.once(signal, async () => {
+    if (ipcSocket && !ipcSocket.destroyed) {
+      ipcSocket.destroy()
+    }
     if (player && player.exitCode === null && player.signalCode === null) {
       player.kill('SIGTERM')
       await new Promise(resolve => {
@@ -57,6 +65,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     }
     try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
     try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
+    try { unlinkSync(ipcSocketPath) } catch {}
     process.exit(1)
   })
 }
@@ -80,9 +89,6 @@ try {
   file.select(1)
 
   const url = `http://127.0.0.1:${server.address().port}${file.streamURL}`
-  const { createConnection } = await import('node:net')
-  const { join } = await import('node:path')
-  const ipcSocketPath = join(outputPath, 'mpv.sock')
 
   console.log('STATUS: Abrindo o reprodutor mpv…')
   player = spawn(mpvPath, [
@@ -93,19 +99,39 @@ try {
     url,
   ], { stdio: 'inherit' })
 
-  let ipcSocket
   let playingEmitted = false
   let attempts = 0
+  let ipcBuffer = ''
   const connectIpc = () => {
     attempts++
     ipcSocket = createConnection(ipcSocketPath)
     ipcSocket.on('connect', () => {
       ipcSocket.on('data', chunk => {
-        const text = chunk.toString('utf-8')
-        if (!playingEmitted && (text.includes('"playback-restart"') || text.includes('"file-loaded"'))) {
-          playingEmitted = true
-          console.log('STATUS:PLAYING Reproduzindo no mpv')
-          ipcSocket.destroy()
+        ipcBuffer += chunk.toString('utf-8')
+        let newlineIndex
+        while ((newlineIndex = ipcBuffer.indexOf('\n')) !== -1) {
+          const line = ipcBuffer.slice(0, newlineIndex).trim()
+          ipcBuffer = ipcBuffer.slice(newlineIndex + 1)
+          if (!line) continue
+
+          let isMatch = false
+          try {
+            const msg = JSON.parse(line)
+            if (msg.event === 'playback-restart' || msg.event === 'file-loaded') {
+              isMatch = true
+            }
+          } catch {}
+
+          if (!isMatch && (line.includes('"playback-restart"') || line.includes('"file-loaded"'))) {
+            isMatch = true
+          }
+
+          if (isMatch && !playingEmitted) {
+            playingEmitted = true
+            console.log('STATUS:PLAYING Reproduzindo no mpv')
+            ipcSocket.destroy()
+            break
+          }
         }
       })
     })
@@ -126,6 +152,9 @@ try {
   console.error(error?.stack || String(error))
   exitCode = 1
 } finally {
+  if (ipcSocket && !ipcSocket.destroyed) {
+    ipcSocket.destroy()
+  }
   if (player && player.exitCode === null && player.signalCode === null) {
     player.kill('SIGTERM')
     await new Promise(resolve => {
@@ -135,10 +164,7 @@ try {
   }
   try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
   try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
-  try {
-    const { unlinkSync } = await import('node:fs')
-    unlinkSync(join(outputPath, 'mpv.sock'))
-  } catch {}
+  try { unlinkSync(ipcSocketPath) } catch {}
 }
 
 process.exitCode = exitCode
