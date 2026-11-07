@@ -255,7 +255,12 @@ class ResultsUI:
         return False
 
     def sort_batches_by_favorite(self, rows):
-        return sorted(rows, key=lambda item: not library.is_favorite_batch(self.current_anime, item))
+        def _sort_key(item):
+            is_fav = library.is_favorite_batch(self.current_anime, item)
+            is_trusted = nyaa.is_trusted_group(item.get('title', ''))
+            return (0 if is_fav else (1 if is_trusted else 2))
+
+        return sorted(rows, key=_sort_key)
 
     def render_batch_rows(self):
         self.clear_batch_rows()
@@ -272,7 +277,12 @@ class ResultsUI:
                 title=item['title'] or tr('Batch sem título'),
                 subtitle=f"{item['size']}   ·   ↑ {item['seeders']}   ·   ↓ {item['leechers']}   ·   {item['downloads']} downloads",
             )
-            row.add_prefix(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
+            if nyaa.is_trusted_group(item.get('title', '')):
+                trusted_icon = Gtk.Image.new_from_icon_name('emblem-default-symbolic')
+                trusted_icon.set_tooltip_text(tr('Fonte recomendada (grupo confiável)'))
+                row.add_prefix(trusted_icon)
+            else:
+                row.add_prefix(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
             favorite = library.is_favorite_batch(self.current_anime, item)
             favorite_button = Gtk.Button.new_from_icon_name('starred-symbolic' if favorite else 'non-starred-symbolic')
             favorite_button.add_css_class('flat')
@@ -294,6 +304,7 @@ class ResultsUI:
         if error:
             self.show_notice(tr(f'Falha ao consultar Nyaa: {error}'))
             return False
+        rows = nyaa.sort_releases_by_trusted(rows)
         self.results = rows
         if searched is not None:
             self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
@@ -305,7 +316,12 @@ class ResultsUI:
             seeders = Gtk.Label(label=f"↑ {item['seeders']}")
             seeders.add_css_class('success')
             seeders.add_css_class('numeric')
-            row.add_prefix(Gtk.Image.new_from_icon_name('package-x-generic-symbolic'))
+            if nyaa.is_trusted_group(title):
+                trusted_icon = Gtk.Image.new_from_icon_name('emblem-default-symbolic')
+                trusted_icon.set_tooltip_text(tr('Fonte recomendada (grupo confiável)'))
+                row.add_prefix(trusted_icon)
+            else:
+                row.add_prefix(Gtk.Image.new_from_icon_name('package-x-generic-symbolic'))
             row.add_suffix(seeders)
             leechers = Gtk.Label(label=f"↓ {item['leechers']}")
             leechers.add_css_class('dim-label')

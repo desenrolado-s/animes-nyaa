@@ -108,6 +108,7 @@ _PT_TO_EN = {
     'Falha ao enviar os temas ao Last.fm: {error}': 'Failed to scrobble themes to Last.fm: {error}',
     'Falha ao reproduzir {title}: {reason}': 'Playback failed for {title}: {reason}',
     '({count} batches favoritos salvos. Clique em “Buscar batches” para atualizar.)': '({count} favorite batches saved. Click “Search batches” to refresh.)',
+    'Fonte recomendada (grupo confiável)': 'Recommended source (trusted group)',
 }
 
 _PT_PATTERNS = (

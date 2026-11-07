@@ -26,6 +26,23 @@ class SearchParsingTests(unittest.TestCase):
         self.assertFalse(nyaa.matches_episode('Show S02E013 1080p', 3))
         self.assertTrue(nyaa.is_batch_title('Show Complete 01-24'))
 
+    def test_trusted_group_detection_and_sorting(self):
+        self.assertTrue(nyaa.is_trusted_group('[Erai-raws] Jujutsu Kaisen - 01 [1080p]'))
+        self.assertTrue(nyaa.is_trusted_group('[feibanyama] One Piece 1000'))
+        self.assertFalse(nyaa.is_trusted_group('[OtherGroup] Bleach 01'))
+
+        releases = [
+            {'title': '[OtherGroup] Show - 01', 'seeders': 100},
+            {'title': '[Erai-raws] Show - 01', 'seeders': 50},
+            {'title': '[feibanyama] Show - 01', 'seeders': 30},
+            {'title': '[Random] Show - 01', 'seeders': 120},
+        ]
+        sorted_releases = nyaa.sort_releases_by_trusted(releases)
+        self.assertEqual(sorted_releases[0]['title'], '[Erai-raws] Show - 01')
+        self.assertEqual(sorted_releases[1]['title'], '[feibanyama] Show - 01')
+        self.assertEqual(sorted_releases[2]['title'], '[OtherGroup] Show - 01')
+        self.assertEqual(sorted_releases[3]['title'], '[Random] Show - 01')
+
     def test_torrent_listing_filters_video_files_and_finds_episode(self):
         result = type('Result', (), {'returncode': 0,
                                     'stdout': '0 Show/Show - 01.mkv (1 GB)\n1 notes.txt (1 KB)\n',
