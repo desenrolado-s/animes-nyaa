@@ -58,8 +58,35 @@ class ResultsUI:
         search_inner.set_margin_start(14)
         search_inner.set_margin_end(14)
 
-        search_label = self.label('Consulta enviada ao Nyaa', 'caption-heading')
-        search_inner.append(search_label)
+        header_box = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        search_label = self.label(tr('Consulta enviada ao Nyaa'), 'caption-heading')
+        search_label.set_hexpand(True)
+        header_box.append(search_label)
+
+        self.search_info_button = Gtk.MenuButton()
+        self.search_info_button.set_icon_name('dialog-information-symbolic')
+        self.search_info_button.add_css_class('flat')
+        self.search_info_button.set_tooltip_text(tr('Ver termos de busca alternativos'))
+        self.search_info_button.set_valign(Gtk.Align.CENTER)
+
+        search_popover = Gtk.Popover()
+        pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        pop_box.set_margin_top(10)
+        pop_box.set_margin_bottom(10)
+        pop_box.set_margin_start(12)
+        pop_box.set_margin_end(12)
+        pop_title = self.label(tr('Consultas enviadas ao Nyaa'), 'heading')
+        self.search_trace = self.label('', 'dim-label')
+        self.search_trace.set_wrap(True)
+        self.search_trace.set_max_width_chars(42)
+        pop_box.append(pop_title)
+        pop_box.append(self.search_trace)
+        search_popover.set_child(pop_box)
+        self.search_info_button.set_popover(search_popover)
+        self.search_info_button.set_visible(False)
+        header_box.append(self.search_info_button)
+        search_inner.append(header_box)
+
         query_row = Gtk.Box(spacing=8)
         self.release_query = Gtk.Entry(placeholder_text=tr('Termos usados na pesquisa'), hexpand=True)
         self.release_query.set_activates_default(True)
@@ -69,9 +96,6 @@ class ResultsUI:
         search_button.add_css_class('suggested-action')
         query_row.append(search_button)
         search_inner.append(query_row)
-        self.search_trace = self.label('', 'dim-label')
-        self.search_trace.set_margin_start(4)
-        search_inner.append(self.search_trace)
 
         self.extra_pattern_revealer = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.extra_pattern = Gtk.Entry(placeholder_text='E.g. 1080p, [Group], dual audio', hexpand=True)
@@ -107,6 +131,11 @@ class ResultsUI:
         page.append(actions)
         return page
 
+    def update_search_trace(self, text):
+        self.search_trace.set_text(text)
+        if hasattr(self, 'search_info_button'):
+            self.search_info_button.set_visible(bool(text.strip()))
+
     def toggle_extra_pattern(self):
         visible = not self.extra_pattern_revealer.get_reveal_child()
         self.extra_pattern_revealer.set_reveal_child(visible)
@@ -133,7 +162,7 @@ class ResultsUI:
         self.batch_results = library.favorite_batches(self.current_anime)
         self.render_batch_rows()
         count = len(self.batch_results)
-        self.batch_search_trace.set_text(
+        self.update_batch_search_trace(
             tr(f'{count} batches favoritos salvos. Clique em “Buscar batches” para atualizar.')
             if count else tr('Seus batches favoritos aparecerão aqui, mesmo antes de pesquisar.')
         )
@@ -161,10 +190,10 @@ class ResultsUI:
         editable_query = query if edited else (base_query_sets[0][0] if base_query_sets and base_query_sets[0] else query)
         if mode == 'batch':
             self.batch_search_query.set_text(editable_query)
-            self.batch_search_trace.set_text(tr('Consultas: ') + '  ·  '.join(display_queries))
+            self.update_batch_search_trace(tr('Consultas: ') + '  ·  '.join(display_queries))
         else:
             self.release_query.set_text(editable_query)
-            self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(display_queries))
+            self.update_search_trace(tr('Consultas: ') + '  ·  '.join(display_queries))
         self.active_search_query = display_queries[0] if display_queries else query
 
         def worker():
@@ -272,7 +301,7 @@ class ResultsUI:
         merged = favorites + [item for item in rows if item.get('magnet') not in seen]
         self.batch_results = self.sort_batches_by_favorite(merged)
         if searched is not None:
-            self.batch_search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
+            self.update_batch_search_trace(tr('Consultas: ') + '  ·  '.join(searched))
         self.render_batch_rows()
         saved_count = len(favorites)
         if rows:
@@ -338,7 +367,7 @@ class ResultsUI:
         rows = nyaa.sort_releases_by_trusted(rows)
         self.results = rows
         if searched is not None:
-            self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
+            self.update_search_trace(tr('Consultas: ') + '  ·  '.join(searched))
         self.results_count.set_text(tr(f'{len(rows)} releases encontradas'))
         for item in rows:
             title = item['title'] or tr('Release sem título')

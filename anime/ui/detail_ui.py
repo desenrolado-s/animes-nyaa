@@ -80,6 +80,29 @@ class DetailUI:
         search_card_title = self.label(tr('Pesquisar batches no Nyaa'), 'caption-heading')
         search_card_title.set_hexpand(True)
         header_box.append(search_card_title)
+
+        self.batch_search_info_button = Gtk.MenuButton()
+        self.batch_search_info_button.set_icon_name('dialog-information-symbolic')
+        self.batch_search_info_button.add_css_class('flat')
+        self.batch_search_info_button.set_tooltip_text(tr('Ver termos de busca alternativos'))
+        self.batch_search_info_button.set_valign(Gtk.Align.CENTER)
+
+        batch_popover = Gtk.Popover()
+        batch_pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        batch_pop_box.set_margin_top(10)
+        batch_pop_box.set_margin_bottom(10)
+        batch_pop_box.set_margin_start(12)
+        batch_pop_box.set_margin_end(12)
+        batch_pop_title = self.label(tr('Consultas de batches enviadas ao Nyaa'), 'heading')
+        self.batch_search_trace = self.label('', 'dim-label')
+        self.batch_search_trace.set_wrap(True)
+        self.batch_search_trace.set_max_width_chars(42)
+        batch_pop_box.append(batch_pop_title)
+        batch_pop_box.append(self.batch_search_trace)
+        batch_popover.set_child(batch_pop_box)
+        self.batch_search_info_button.set_popover(batch_popover)
+        self.batch_search_info_button.set_visible(False)
+        header_box.append(self.batch_search_info_button)
         batch_search_inner.append(header_box)
 
         batch_search_row = Gtk.Box(spacing=8)
@@ -102,9 +125,6 @@ class DetailUI:
         pattern_actions.append(pattern_btn)
         batch_search_inner.append(pattern_actions)
 
-        self.batch_search_trace = self.label('', 'dim-label')
-        self.batch_search_trace.set_margin_start(4)
-        batch_search_inner.append(self.batch_search_trace)
         batch_search_card.append(batch_search_inner)
         batch_catalog_page.append(batch_search_card)
 
@@ -314,7 +334,7 @@ class DetailUI:
         self.anime_tabs.set_visible_child_name('episodes')
         self.batch_view.set_visible_child_name('catalog')
         self.batch_search_query.set_text('')
-        self.batch_search_trace.set_text('')
+        self.update_batch_search_trace('')
         self.batch_search_performed = False
         self.populate_episodes(count)
         self.refresh_watched_episodes()
@@ -557,3 +577,8 @@ class DetailUI:
         if hasattr(self, 'episode_tab_stack'):
             self.episode_tab_stack.set_visible_child_name('episodes')
         self.stack.set_visible_child_name('anime')
+
+    def update_batch_search_trace(self, text):
+        self.batch_search_trace.set_text(text)
+        if hasattr(self, 'batch_search_info_button'):
+            self.batch_search_info_button.set_visible(bool(text.strip()))
