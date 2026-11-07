@@ -28,8 +28,12 @@ class SearchParsingTests(unittest.TestCase):
 
     def test_trusted_group_detection_and_sorting(self):
         self.assertTrue(nyaa.is_trusted_group('[Erai-raws] Jujutsu Kaisen - 01 [1080p]'))
+        self.assertTrue(nyaa.is_trusted_group('(Erai-Raws) Jujutsu Kaisen - 01'))
         self.assertTrue(nyaa.is_trusted_group('[feibanyama] One Piece 1000'))
         self.assertFalse(nyaa.is_trusted_group('[OtherGroup] Bleach 01'))
+        self.assertFalse(nyaa.is_trusted_group('[Not-Erai-Raws] Jujutsu Kaisen - 01'))
+        self.assertFalse(nyaa.is_trusted_group('[Fake-feibanyama] One Piece 1000'))
+        self.assertFalse(nyaa.is_trusted_group('[feibanyama-fake] One Piece 1000'))
 
         releases = [
             {'title': '[OtherGroup] Show - 01', 'seeders': 100},

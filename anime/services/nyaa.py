@@ -68,14 +68,17 @@ def search(query, category='1_0', limit=50):
 
 
 TRUSTED_GROUPS = ('erai-raws', 'feibanyama')
+_TRUSTED_GROUP_PATTERN = re.compile(
+    r'(?:^|[\[\(\s])(?:erai[ ._-]*raws|feibanyama)(?:[\]\)\s]|$)',
+    re.IGNORECASE,
+)
 
 
 def is_trusted_group(title):
-    """Check if the release title belongs to a trusted release group."""
+    """Check if the release title belongs to a trusted release group tag."""
     if not title:
         return False
-    title_lower = title.lower()
-    return any(group in title_lower for group in TRUSTED_GROUPS)
+    return bool(_TRUSTED_GROUP_PATTERN.search(title))
 
 
 def sort_releases_by_trusted(rows):
