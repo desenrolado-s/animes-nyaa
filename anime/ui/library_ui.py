@@ -53,7 +53,7 @@ class LibraryUI:
             row = Adw.ActionRow()
             row.set_use_markup(False)
             row.set_title(title)
-            row.set_subtitle(GLib.markup_escape_text(subtitle))
+            row.set_subtitle(subtitle)
             cover = Gtk.Picture()
             cover.set_size_request(64, 90)
             cover.set_content_fit(Gtk.ContentFit.COVER)

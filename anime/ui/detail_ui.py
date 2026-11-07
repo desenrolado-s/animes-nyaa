@@ -332,7 +332,7 @@ class DetailUI:
         for number, row in self.episode_rows:
             title = titles.get(number)
             if title:
-                row.set_subtitle(GLib.markup_escape_text(title))
+                row.set_subtitle(title)
         for number, _filename, row, _file in getattr(self, 'batch_episode_rows', []):
             title = titles.get(number)
             if title:
@@ -442,8 +442,9 @@ class DetailUI:
         for number in self.episode_filtered_numbers[start:end]:
             row = Adw.ActionRow()
             row.set_use_markup(False)
-            row.set_title(self.episode_row_title(number))
-            row.set_subtitle(tr('Pesquisar releases no Nyaa'))
+            row.set_title(tr(f'Episódio {number:02d}'))
+            title = self.current_episode_titles.get(number)
+            row.set_subtitle(title if title else tr('Pesquisar releases no Nyaa'))
             number_badge = Gtk.Label(label=f'{number:02d}')
             number_badge.add_css_class('numeric')
             number_badge.add_css_class('heading')

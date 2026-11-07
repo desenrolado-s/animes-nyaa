@@ -100,3 +100,18 @@ class DetailLayoutTests(unittest.TestCase):
         self.assertEqual(len(self.app.results), 1)
         row = self.app.release_list.get_row_at_index(0)
         self.assertEqual(row.get_title(), special_title)
+        self.assertEqual(row.get_subtitle(), '1.3 GiB & fast   ·   5 downloads')
+
+    def test_episode_subtitles_consistency_and_special_chars(self):
+        row0 = self.app.episode_list.get_row_at_index(0)
+        self.assertEqual(row0.get_title(), 'Episódio 01')
+        self.assertEqual(row0.get_subtitle(), 'Pesquisar releases no Nyaa')
+
+        self.app.finish_episode_titles(self.sample_anime['id'], {1: 'Asta & Yuno <Magic>'})
+        self.assertEqual(row0.get_title(), 'Episódio 01')
+        self.assertEqual(row0.get_subtitle(), 'Asta & Yuno <Magic>')
+
+        self.app.filter_episodes()
+        refreshed_row0 = self.app.episode_list.get_row_at_index(0)
+        self.assertEqual(refreshed_row0.get_title(), 'Episódio 01')
+        self.assertEqual(refreshed_row0.get_subtitle(), 'Asta & Yuno <Magic>')
