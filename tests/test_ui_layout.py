@@ -115,3 +115,37 @@ class DetailLayoutTests(unittest.TestCase):
         refreshed_row0 = self.app.episode_list.get_row_at_index(0)
         self.assertEqual(refreshed_row0.get_title(), 'Episódio 01')
         self.assertEqual(refreshed_row0.get_subtitle(), 'Asta & Yuno <Magic>')
+
+    def test_anime_overview_and_panels_have_proper_margins_and_padding(self):
+        self.assertGreater(self.app.anime_poster.get_margin_top(), 0)
+        episode_panel = self.app.episode_tab_stack.get_child_by_name('episodes')
+        self.assertGreaterEqual(episode_panel.get_margin_top(), 10)
+        self.assertGreaterEqual(episode_panel.get_margin_start(), 12)
+        batch_catalog = self.app.batch_view.get_child_by_name('catalog')
+        self.assertGreaterEqual(batch_catalog.get_margin_top(), 10)
+        self.assertGreaterEqual(batch_catalog.get_margin_start(), 12)
+
+    def test_search_traces_use_popovers_without_expanding_card(self):
+        self.assertFalse(self.app.search_info_button.get_visible())
+        self.assertFalse(self.app.batch_search_info_button.get_visible())
+
+        self.app.update_search_trace('Consultas: Q1 · Q2 · Q3 · Q4')
+        self.assertEqual(self.app.search_trace.get_text(), 'Consultas: Q1 · Q2 · Q3 · Q4')
+        self.assertTrue(self.app.search_info_button.get_visible())
+
+        self.app.update_search_trace('')
+        self.assertFalse(self.app.search_info_button.get_visible())
+
+    def test_playback_notification_card_has_proper_padding(self):
+        playback_card = self.app.playback_revealer.get_child()
+        self.assertIsNotNone(playback_card)
+        self.assertTrue(playback_card.has_css_class('card'))
+
+        playback_content = playback_card.get_first_child()
+        self.assertIsNotNone(playback_content)
+        self.assertGreaterEqual(playback_content.get_margin_top(), 10)
+        self.assertGreaterEqual(playback_content.get_margin_bottom(), 10)
+        self.assertGreaterEqual(playback_content.get_margin_start(), 12)
+        self.assertGreaterEqual(playback_content.get_margin_end(), 12)
+        self.assertGreaterEqual(playback_content.get_spacing(), 12)
+
