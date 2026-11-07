@@ -1,4 +1,5 @@
 """Nyaa result lists, batch file browsing and mpv playback."""
+import atexit
 import os
 import shutil
 import subprocess
@@ -22,6 +23,16 @@ from .i18n import tr
 
 BATCH_ROW_RENDER_BATCH_SIZE = 30
 BATCH_FILE_RENDER_BATCH_SIZE = 40
+ACTIVE_PLAYBACK_DIRECTORIES = set()
+
+
+def _cleanup_active_playback_directories():
+    for directory in list(ACTIVE_PLAYBACK_DIRECTORIES):
+        shutil.rmtree(directory, ignore_errors=True)
+    ACTIVE_PLAYBACK_DIRECTORIES.clear()
+
+
+atexit.register(_cleanup_active_playback_directories)
 
 
 class ResultsUI:
@@ -440,6 +451,7 @@ class ResultsUI:
             temporary_directory = settings.temporary_directory()
             temporary_directory.mkdir(parents=True, exist_ok=True)
             playback_directory = Path(tempfile.mkdtemp(prefix='anime-nyaa-', dir=temporary_directory))
+            ACTIVE_PLAYBACK_DIRECTORIES.add(playback_directory)
             helper = Path(__file__).resolve().parents[1] / 'services' / 'stream_episode.mjs'
             command = [node, str(helper), webtorrent, item['magnet'],
                        str(file_index) if file_index is not None else '-1',
@@ -461,6 +473,7 @@ class ResultsUI:
             )
         except (OSError, KeyError, ValueError) as exc:
             if playback_directory is not None:
+                ACTIVE_PLAYBACK_DIRECTORIES.discard(playback_directory)
                 shutil.rmtree(playback_directory, ignore_errors=True)
             self.show_notice(tr(f'Não foi possível iniciar a reprodução: {exc}'))
             return
@@ -525,6 +538,7 @@ class ResultsUI:
                 GLib.idle_add(self.show_notice, tr(f'Falha ao reproduzir {title}: {reason}'))
         finally:
             if playback_directory is not None:
+                ACTIVE_PLAYBACK_DIRECTORIES.discard(playback_directory)
                 shutil.rmtree(playback_directory, ignore_errors=True)
 
     def open_page(self):

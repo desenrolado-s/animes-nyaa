@@ -58,6 +58,22 @@ class PersistenceTests(unittest.TestCase):
         self.assertFalse(settings.lastfm_credentials()['enabled'])
         self.assertEqual(settings.settings_path().stat().st_mode & 0o777, 0o600)
 
+    def test_cleanup_temporary_directory_removes_stale_folders(self):
+        custom_dir = self.home / 'custom_downloads'
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        settings.set_temporary_directory(str(custom_dir))
+
+        stale_dir = custom_dir / 'anime-nyaa-stale123'
+        stale_dir.mkdir(parents=True, exist_ok=True)
+        (stale_dir / 'sample.mkv').write_text('dummy')
+
+        active_dir = custom_dir / 'anime-nyaa-active456'
+        active_dir.mkdir(parents=True, exist_ok=True)
+
+        settings.cleanup_temporary_directory(active_directories=[active_dir])
+        self.assertFalse(stale_dir.exists())
+        self.assertTrue(active_dir.exists())
+
     def test_watch_progress_and_history_round_trip(self):
         self.assertTrue(watch_progress.mark_watched(12, 4))
         self.assertEqual(watch_progress.watched_episodes(12), {4})

@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 
 
 DEFAULT_TEMP_DIRECTORY = Path('/tmp')
@@ -21,6 +22,28 @@ def temporary_directory():
     except (OSError, ValueError):
         pass
     return DEFAULT_TEMP_DIRECTORY
+
+
+def cleanup_temporary_directory(active_directories=None):
+    """Remove residual anime-nyaa-* temporary directories from storage folders."""
+    active = {str(Path(p).resolve()) for p in (active_directories or ())}
+    target_dirs = {DEFAULT_TEMP_DIRECTORY, temporary_directory()}
+    for parent in target_dirs:
+        try:
+            if not parent.is_dir():
+                continue
+            for item in parent.glob('anime-nyaa-*'):
+                try:
+                    if str(item.resolve()) in active:
+                        continue
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    elif item.is_file():
+                        item.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        except OSError:
+            pass
 
 
 def language():
