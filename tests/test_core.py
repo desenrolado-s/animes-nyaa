@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from anime.services import lastfm, nyaa, torrent
 from anime.storage import history, lastfm_progress, settings, watch_progress
+from anime.ui.i18n import tr
 
 
 class SearchParsingTests(unittest.TestCase):
@@ -91,6 +92,19 @@ class LastFmTests(unittest.TestCase):
 
     def test_authorization_url_encodes_token(self):
         self.assertIn('token=a+b', lastfm.authorization_url('key', 'a b'))
+
+
+class PlaybackStatusTests(unittest.TestCase):
+    def test_status_translations(self):
+        settings.set_language('en')
+        self.assertEqual(tr('Cancelar reprodução'), 'Cancel playback')
+        self.assertEqual(tr('Conectando ao WebTorrent…'), 'Connecting to WebTorrent…')
+        self.assertEqual(tr('Conectando aos peers do torrent…'), 'Connecting to torrent peers…')
+        self.assertEqual(tr('Conectado a 5 peer(s)…'), 'Connected to 5 peer(s)…')
+        self.assertEqual(tr('Reproduzindo no mpv'), 'Playing in mpv')
+        self.assertEqual(tr('Reprodução cancelada.'), 'Playback cancelled.')
+        settings.set_language('pt')
+        self.assertEqual(tr('Cancelar reprodução'), 'Cancelar reprodução')
 
 
 if __name__ == '__main__':

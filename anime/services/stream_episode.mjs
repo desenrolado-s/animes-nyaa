@@ -16,7 +16,15 @@ const requireFromCli = createRequire(realpathSync(cliPath))
 const webtorrentModule = requireFromCli.resolve('webtorrent')
 const { default: WebTorrent } = await import(pathToFileURL(webtorrentModule).href)
 const client = new WebTorrent({ torrentPort: 0, dhtPort: 0 })
+console.log('STATUS: Conectando aos peers do torrent…')
 const torrent = client.add(magnet, { path: outputPath, deselect: true })
+
+torrent.on('wire', () => {
+  if (!torrent.ready) {
+    console.log(`STATUS: Conectado a ${torrent.numPeers} peer(s)…`)
+  }
+})
+
 const streamServer = client.createServer({}, 'node')
 const server = streamServer.server
 
@@ -42,6 +50,7 @@ try {
   const listening = waitFor(server, 'listening')
   server.listen(0)
   await Promise.all([ready, listening])
+  console.log('STATUS: Metadados carregados. Preparando episódio…')
 
   const selectedIndex = index === -1
     ? torrent.files.reduce((best, candidate, i, files) => candidate.length > files[best].length ? i : best, 0)
@@ -55,7 +64,9 @@ try {
   file.select(1)
 
   const url = `http://127.0.0.1:${server.address().port}${file.streamURL}`
-  player = spawn(mpvPath, ['--really-quiet', '--loop=no', '--ontop', url], { stdio: 'inherit' })
+  console.log('STATUS: Abrindo o reprodutor mpv…')
+  player = spawn(mpvPath, ['--really-quiet', '--loop=no', '--ontop', url], { stdio: ['ignore', 'ignore', 'inherit'] })
+  console.log('STATUS:PLAYING Reproduzindo no mpv')
   exitCode = await new Promise((resolve, reject) => {
     player.once('error', reject)
     player.once('exit', (code, signal) => resolve(code ?? (signal ? 1 : 0)))
