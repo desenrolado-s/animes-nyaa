@@ -13,7 +13,8 @@ import webbrowser
 import gi
 gi.require_version('Adw', '1')
 gi.require_version('Gtk', '4.0')
-from gi.repository import Adw, GLib, Gtk
+gi.require_version('Pango', '1.0')
+from gi.repository import Adw, GLib, Gtk, Pango
 
 from ..services import anilist, lastfm, nyaa, torrent
 from ..storage import history, lastfm_progress, library, settings, watch_progress
@@ -29,10 +30,20 @@ ACTIVE_PLAYBACK_DIRECTORIES = set()
 class ResultsUI:
     def build_results_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        nav = Gtk.Box(spacing=10)
-        nav.append(self.button('← Episódios e batches', self.show_anime))
+        page.set_margin_top(8)
+        page.set_margin_bottom(8)
+        page.set_margin_start(8)
+        page.set_margin_end(8)
+        nav = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        back_to_episodes = Gtk.Button.new_from_icon_name('go-previous-symbolic')
+        back_to_episodes.add_css_class('flat')
+        back_to_episodes.set_tooltip_text(tr('Voltar aos episódios'))
+        back_to_episodes.connect('clicked', lambda *_: self.show_anime())
+        nav.append(back_to_episodes)
         self.results_heading = self.label('')
         self.results_heading.add_css_class('title-2')
+        self.results_heading.set_hexpand(True)
+        self.results_heading.set_ellipsize(Pango.EllipsizeMode.END)
         nav.append(self.results_heading)
         page.append(nav)
 
@@ -221,10 +232,17 @@ class ResultsUI:
         patterns = list(dict.fromkeys(patterns))
         return [[f'{title} {pattern}' for pattern in patterns] for title in anime_titles]
 
+    def is_results_active(self):
+        if getattr(self, 'episode_tab_stack', None):
+            return (self.stack.get_visible_child_name() == 'anime' and
+                    self.anime_tabs.get_visible_child_name() == 'episodes' and
+                    self.episode_tab_stack.get_visible_child_name() == 'results')
+        return self.stack.get_visible_child_name() == 'results'
+
     def category_changed(self, *_args):
         if not getattr(self, 'current_anime', None):
             return
-        if self.stack.get_visible_child_name() == 'results' and getattr(self, 'active_episode', None):
+        if self.is_results_active() and getattr(self, 'active_episode', None):
             if self.release_query.get_text().strip():
                 self.search_edited_releases()
             else:
@@ -418,14 +436,15 @@ class ResultsUI:
                                 subtitle=f"{file['name']}  ·  {file['size']}")
             badge = Gtk.Label(label=f'{number:02d}')
             badge.add_css_class('numeric')
-            badge.add_css_class('dim-label')
+            badge.add_css_class('heading')
+            badge.set_size_request(28, -1)
             row.add_prefix(badge)
             play = Gtk.Button.new_from_icon_name('media-playback-start-symbolic')
-            play.add_css_class('flat')
+            play.add_css_class('suggested-action')
             play.set_tooltip_text(tr(f'Assistir episódio {number:02d}'))
             play.connect('clicked', lambda *_args, selected=file: self.play_batch_episode(selected))
             row.add_suffix(play)
-            watched_badge = Gtk.Label(label='✓')
+            watched_badge = Gtk.Image.new_from_icon_name('emblem-ok-symbolic')
             watched_badge.add_css_class('success')
             watched_badge.set_tooltip_text(tr('Assistido'))
             watched_badge.set_visible(number in watched)

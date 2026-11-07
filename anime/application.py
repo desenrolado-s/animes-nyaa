@@ -164,7 +164,6 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.stack.set_transition_duration(120)
         self.stack.add_named(self.build_catalog_page(), 'catalog')
         self.stack.add_named(self.build_anime_page(), 'anime')
-        self.stack.add_named(self.build_results_page(), 'results')
         self.stack.add_named(self.build_my_list_page(), 'my-list')
         self.stack.add_named(self.build_history_page(), 'history')
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, hexpand=True, vexpand=True)
