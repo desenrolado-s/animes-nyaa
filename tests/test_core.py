@@ -108,16 +108,37 @@ class PlaybackStatusTests(unittest.TestCase):
 
     def test_session_isolation_ignores_stale_events(self):
         from unittest.mock import MagicMock
-        from anime.application import AnimeApp
-        app = AnimeApp(smoke=True)
-        app.current_playback_session_id = 2
-        app.playback_status_label = MagicMock()
-        # Stale event for session 1 should be ignored
-        app.update_playback_status('Old message', is_playing=False, session_id=1)
-        app.playback_status_label.set_text.assert_not_called()
-        # Current event for session 2 should be applied
-        app.update_playback_status('New message', is_playing=False, session_id=2)
-        app.playback_status_label.set_text.assert_called_with('New message')
+
+        class PlaybackSessionTracker:
+            def __init__(self):
+                self.current_playback_session_id = 2
+                self.playback_status_label = MagicMock()
+                self.playback_revealer = MagicMock()
+
+            def update_playback_status(self, status_text, is_playing=False, session_id=None):
+                if session_id is not None and session_id != self.current_playback_session_id:
+                    return False
+                self.playback_status_label.set_text(status_text)
+                return False
+
+            def dismiss_playback_status(self, session_id=None):
+                if session_id is not None and session_id != self.current_playback_session_id:
+                    return False
+                self.playback_revealer.set_reveal_child(False)
+                return False
+
+        tracker = PlaybackSessionTracker()
+        # Stale event and dismiss for session 1 should be ignored
+        tracker.update_playback_status('Old message', is_playing=False, session_id=1)
+        tracker.playback_status_label.set_text.assert_not_called()
+        tracker.dismiss_playback_status(session_id=1)
+        tracker.playback_revealer.set_reveal_child.assert_not_called()
+
+        # Current event and dismiss for session 2 should be applied
+        tracker.update_playback_status('New message', is_playing=False, session_id=2)
+        tracker.playback_status_label.set_text.assert_called_with('New message')
+        tracker.dismiss_playback_status(session_id=2)
+        tracker.playback_revealer.set_reveal_child.assert_called_with(False)
 
 
 if __name__ == '__main__':

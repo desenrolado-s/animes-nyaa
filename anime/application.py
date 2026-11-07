@@ -293,10 +293,14 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
             self.playback_cancel_button.set_visible(False)
             if getattr(self, 'playback_dismiss_timeout', 0):
                 GLib.source_remove(self.playback_dismiss_timeout)
-            self.playback_dismiss_timeout = GLib.timeout_add_seconds(4, self.dismiss_playback_status)
+            self.playback_dismiss_timeout = GLib.timeout_add_seconds(
+                4, lambda sid=session_id: (self.dismiss_playback_status(sid), False)[1]
+            )
         return False
 
-    def dismiss_playback_status(self):
+    def dismiss_playback_status(self, session_id=None):
+        if session_id is not None and session_id != self.current_playback_session_id:
+            return False
         self.playback_revealer.set_reveal_child(False)
         self.playback_dismiss_timeout = 0
         self.playback_process = None

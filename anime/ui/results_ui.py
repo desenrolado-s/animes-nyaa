@@ -546,7 +546,7 @@ class ResultsUI:
             if process.returncode != 0:
                 if not cancelled:
                     if hasattr(self, 'dismiss_playback_status'):
-                        GLib.idle_add(self.dismiss_playback_status)
+                        GLib.idle_add(self.dismiss_playback_status, session_id)
                     details = ''.join(output_lines).strip().splitlines()
                     reason = '\n'.join(details[-4:])[-500:] if details else tr(f'WebTorrent encerrou com código {process.returncode}.')
                     GLib.idle_add(self.show_notice, tr(f'Falha ao reproduzir {title}: {reason}'))
