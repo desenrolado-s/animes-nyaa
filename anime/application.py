@@ -1,5 +1,6 @@
 """GTK application shell and composition of the UI components."""
 import os
+import signal
 import sys
 import threading
 import webbrowser
@@ -35,6 +36,9 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.catalog_has_next = False
         self.search_mode = 'episode'
         self.active_query = ''
+        self.playback_session_counter = 0
+        self.current_playback_session_id = None
+        self.cancelled_playback_sessions = set()
 
     def _configure_bundled_icon_fallback(self, display):
         bundle = getattr(sys, '_MEIPASS', None)
@@ -266,8 +270,9 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         button.connect('clicked', lambda *_args: callback())
         return button
 
-    def show_playback_status(self, title, status_text, process=None):
+    def show_playback_status(self, title, status_text, process=None, session_id=None):
         self.playback_process = process
+        self.current_playback_session_id = session_id
         if getattr(self, 'playback_dismiss_timeout', 0):
             GLib.source_remove(self.playback_dismiss_timeout)
             self.playback_dismiss_timeout = 0
@@ -278,7 +283,9 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         self.playback_cancel_button.set_visible(True)
         self.playback_revealer.set_reveal_child(True)
 
-    def update_playback_status(self, status_text, is_playing=False):
+    def update_playback_status(self, status_text, is_playing=False, session_id=None):
+        if session_id is not None and session_id != self.current_playback_session_id:
+            return False
         self.playback_status_label.set_text(status_text)
         if is_playing:
             self.playback_spinner.stop()
@@ -287,6 +294,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
             if getattr(self, 'playback_dismiss_timeout', 0):
                 GLib.source_remove(self.playback_dismiss_timeout)
             self.playback_dismiss_timeout = GLib.timeout_add_seconds(4, self.dismiss_playback_status)
+        return False
 
     def dismiss_playback_status(self):
         self.playback_revealer.set_reveal_child(False)
@@ -296,12 +304,18 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
 
     def cancel_current_playback(self):
         proc = self.playback_process
+        session_id = self.current_playback_session_id
+        if session_id:
+            self.cancelled_playback_sessions.add(session_id)
         self.playback_process = None
         if proc:
             try:
-                proc.terminate()
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except OSError:
-                pass
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
         self.dismiss_playback_status()
         self.show_notice('Reprodução cancelada.')
 

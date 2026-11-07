@@ -45,6 +45,22 @@ function waitFor(emitter, successEvent) {
 
 let player
 let exitCode = 0
+
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.once(signal, async () => {
+    if (player && player.exitCode === null && player.signalCode === null) {
+      player.kill('SIGTERM')
+      await new Promise(resolve => {
+        player.once('exit', resolve)
+        setTimeout(resolve, 1500)
+      })
+    }
+    try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
+    try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
+    process.exit(1)
+  })
+}
+
 try {
   const ready = torrent.ready ? Promise.resolve() : waitFor(torrent, 'ready')
   const listening = waitFor(server, 'listening')
@@ -65,8 +81,20 @@ try {
 
   const url = `http://127.0.0.1:${server.address().port}${file.streamURL}`
   console.log('STATUS: Abrindo o reprodutor mpv…')
-  player = spawn(mpvPath, ['--really-quiet', '--loop=no', '--ontop', url], { stdio: ['ignore', 'ignore', 'inherit'] })
-  console.log('STATUS:PLAYING Reproduzindo no mpv')
+  player = spawn(mpvPath, [
+    '--really-quiet',
+    '--loop=no',
+    '--ontop',
+    '--term-playing-msg=MPV_STARTED_PLAYING',
+    url,
+  ], { stdio: ['ignore', 'pipe', 'inherit'] })
+
+  player.stdout.on('data', chunk => {
+    if (chunk.toString().includes('MPV_STARTED_PLAYING')) {
+      console.log('STATUS:PLAYING Reproduzindo no mpv')
+    }
+  })
+
   exitCode = await new Promise((resolve, reject) => {
     player.once('error', reject)
     player.once('exit', (code, signal) => resolve(code ?? (signal ? 1 : 0)))
@@ -75,7 +103,13 @@ try {
   console.error(error?.stack || String(error))
   exitCode = 1
 } finally {
-  if (player && player.exitCode === null && player.signalCode === null) player.kill('SIGTERM')
+  if (player && player.exitCode === null && player.signalCode === null) {
+    player.kill('SIGTERM')
+    await new Promise(resolve => {
+      player.once('exit', resolve)
+      setTimeout(resolve, 1500)
+    })
+  }
   try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
   try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
 }
