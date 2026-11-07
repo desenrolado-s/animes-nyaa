@@ -91,3 +91,12 @@ class DetailLayoutTests(unittest.TestCase):
         releases = [{'title': 'Release 1', 'size': '1 GB', 'seeders': '10', 'leechers': '2', 'downloads': '5', 'magnet': 'magnet:?'}]
         self.app.finish_releases(releases, None)
         self.assertEqual(len(self.app.results), 1)
+
+    def test_finish_releases_handles_special_markup_characters(self):
+        self.app.active_episode = 1
+        special_title = '1[喵萌奶茶屋&VCB-Studio] 夏日重现 / Summer Time Rendering <1080p>'
+        releases = [{'title': special_title, 'size': '1.3 GiB & fast', 'seeders': '10', 'leechers': '2', 'downloads': '5', 'magnet': 'magnet:?'}]
+        self.app.finish_releases(releases, None)
+        self.assertEqual(len(self.app.results), 1)
+        row = self.app.release_list.get_row_at_index(0)
+        self.assertEqual(row.get_title(), special_title)

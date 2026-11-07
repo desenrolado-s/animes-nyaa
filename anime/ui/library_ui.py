@@ -50,7 +50,10 @@ class LibraryUI:
                 str(media.get('seasonYear') or ''),
                 tr(f"{media.get('episodes')} episódios") if media.get('episodes') else '',
             ) if value)
-            row = Adw.ActionRow(title=title, subtitle=subtitle)
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(title)
+            row.set_subtitle(GLib.markup_escape_text(subtitle))
             cover = Gtk.Picture()
             cover.set_size_request(64, 90)
             cover.set_content_fit(Gtk.ContentFit.COVER)

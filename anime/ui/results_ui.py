@@ -293,10 +293,12 @@ class ResultsUI:
         end = min(start + BATCH_ROW_RENDER_BATCH_SIZE, len(self.batch_results))
         for item in self.batch_results[start:end]:
             item['is_batch'] = True
-            row = Adw.ActionRow(
-                title=item['title'] or tr('Batch sem título'),
-                subtitle=f"{item['size']}   ·   ↑ {item['seeders']}   ·   ↓ {item['leechers']}   ·   {item['downloads']} downloads",
-            )
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(item.get('title') or tr('Batch sem título'))
+            row.set_subtitle(GLib.markup_escape_text(
+                f"{item['size']}   ·   ↑ {item['seeders']}   ·   ↓ {item['leechers']}   ·   {item['downloads']} downloads"
+            ))
             if nyaa.is_trusted_group(item.get('title', '')):
                 trusted_icon = Gtk.Image.new_from_icon_name('emblem-default-symbolic')
                 trusted_icon.set_tooltip_text(tr('Fonte recomendada (grupo confiável)'))
@@ -332,7 +334,10 @@ class ResultsUI:
         for item in rows:
             title = item['title'] or tr('Release sem título')
             meta = f"{item['size']}   ·   {item['downloads']} downloads"
-            row = Adw.ActionRow(title=title, subtitle=meta)
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(title)
+            row.set_subtitle(GLib.markup_escape_text(meta))
             seeders = Gtk.Label(label=f"↑ {item['seeders']}")
             seeders.add_css_class('success')
             seeders.add_css_class('numeric')
@@ -434,8 +439,10 @@ class ResultsUI:
         end = min(start + BATCH_FILE_RENDER_BATCH_SIZE, len(self.batch_filtered_files))
         watched = getattr(self, 'watched_episodes', set())
         for number, filename, file in self.batch_filtered_files[start:end]:
-            row = Adw.ActionRow(title=self.episode_row_title(number),
-                                subtitle=f"{file['name']}  ·  {file['size']}")
+            row = Adw.ActionRow()
+            row.set_use_markup(False)
+            row.set_title(self.episode_row_title(number))
+            row.set_subtitle(GLib.markup_escape_text(f"{file['name']}  ·  {file['size']}"))
             badge = Gtk.Label(label=f'{number:02d}')
             badge.add_css_class('numeric')
             badge.add_css_class('heading')
