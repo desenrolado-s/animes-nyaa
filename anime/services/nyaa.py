@@ -74,11 +74,38 @@ def is_batch_title(title):
     ))
 
 
-def matches_episode(title, number):
+def season_number_from_title(title):
+    """Return an explicit season number from a catalogue title, if present."""
+    match = re.search(r'\bseason[ ._-]*0*(\d{1,2})\b', title, re.IGNORECASE)
+    if not match:
+        match = re.search(r'(?:^|\s)S0*(\d{1,2})(?=$|\s)', title, re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def strip_season_from_title(title):
+    """Remove a trailing season label so it does not become an Nyaa search term."""
+    title = re.sub(
+        r'\s*(?:[-:–—]\s*)?(?:season[ ._-]*0*\d{1,2}|S0*\d{1,2})\s*$',
+        '', title, flags=re.IGNORECASE,
+    )
+    return title.strip(' :–—-')
+
+
+def matches_episode(title, number, season=None):
     number = int(number)
-    season_episode = re.search(r'\bS\d{1,2}[ ._-]*E(?:P)?[ ._-]*0?(\d{1,3})(?!\d)', title, re.IGNORECASE)
+    reversed_season_episode = re.search(
+        r'\bE(?:P)?0*(\d{1,3})[ ._-]*S0*(\d{1,2})(?!\d)', title, re.IGNORECASE,
+    )
+    if reversed_season_episode:
+        return (int(reversed_season_episode.group(1)) == number and
+                (season is None or int(reversed_season_episode.group(2)) == season))
+    season_episode = re.search(
+        r'\bS0*(\d{1,2})[ ._-]*E(?:P)?[ ._-]*0*(\d{1,3})(?!\d)',
+        title, re.IGNORECASE,
+    )
     if season_episode:
-        return int(season_episode.group(1)) == number
+        return (int(season_episode.group(2)) == number and
+                (season is None or int(season_episode.group(1)) == season))
     explicit_episode = re.search(r'\b(?:EP(?:ISODE)?|E)[ ._-]*0?(\d{1,3})(?!\d)', title, re.IGNORECASE)
     if explicit_episode:
         return int(explicit_episode.group(1)) == number

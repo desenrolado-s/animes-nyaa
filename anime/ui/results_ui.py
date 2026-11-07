@@ -129,6 +129,10 @@ class ResultsUI:
             extra_pattern = self.batch_search_extra.get_text().strip() if self.batch_search_extra.get_visible() else ''
         else:
             extra_pattern = self.extra_pattern.get_text().strip() if self.extra_pattern_revealer.get_reveal_child() else ''
+        anime_titles = (self.current_anime.get('title') or {}) if self.current_anime else {}
+        seasons = [nyaa.season_number_from_title(anime_titles.get(key, ''))
+                   for key in ('english', 'romaji', 'native')]
+        season = next((value for value in seasons if value is not None), None)
         base_query_sets = [[query]] if edited else self.default_query_sets(mode, episode)
         query_sets = [[f'{term} {extra_pattern}'.strip() for term in terms] for terms in base_query_sets]
         display_queries = list(dict.fromkeys(term for terms in query_sets for term in terms))
@@ -153,7 +157,8 @@ class ResultsUI:
                             batch = nyaa.is_batch_title(result['title'])
                             if mode == 'batch' and not batch:
                                 continue
-                            if mode == 'episode' and (batch or (not edited and not nyaa.matches_episode(result['title'], episode))):
+                            if mode == 'episode' and (batch or (not edited and not nyaa.matches_episode(
+                                    result['title'], episode, season=season))):
                                 continue
                             result['is_batch'] = batch
                             if result['magnet'] not in seen:
@@ -178,19 +183,36 @@ class ResultsUI:
         if mode == 'batch':
             return [[f'{title} {term}' for term in ('batch', 'complete', 'season')]
                     for title in anime_titles]
+        seasons = [nyaa.season_number_from_title(title) for title in anime_titles]
+        season = next((value for value in seasons if value is not None), None)
+        search_titles = []
+        for title in anime_titles:
+            without_season = nyaa.strip_season_from_title(title)
+            if without_season:
+                search_titles.append(without_season)
+            if without_season != title:
+                search_titles.append(title)
+        anime_titles = list(dict.fromkeys(search_titles))
         number = int(episode)
         padded = f'{number:02d}'
-        patterns = [
-            f'E0{number}S0{number}',
-            f'E{padded}S{padded}',
-            f'S{padded}E{padded}',
+        patterns = []
+        if season is not None:
+            season_padded = f'{season:02d}'
+            patterns.extend((
+                f'S{season_padded}E{padded}',
+                f'S{season}E{padded}',
+                f'S{season_padded}E{number}',
+                f'E{padded}S{season_padded}',
+                f'E0{number}S0{season}',
+            ))
+        patterns.extend((
             f'E{padded}',
             f'EP{padded}',
             f'EP {padded}',
             f'Episode {padded}',
             padded,
             str(number),
-        ]
+        ))
         if number < 100:
             three_digits = f'{number:03d}'
             patterns.extend((f'E{three_digits}', f'EP{three_digits}', three_digits))
