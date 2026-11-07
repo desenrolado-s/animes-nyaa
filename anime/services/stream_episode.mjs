@@ -80,20 +80,43 @@ try {
   file.select(1)
 
   const url = `http://127.0.0.1:${server.address().port}${file.streamURL}`
+  const { createConnection } = await import('node:net')
+  const { join } = await import('node:path')
+  const ipcSocketPath = join(outputPath, 'mpv.sock')
+
   console.log('STATUS: Abrindo o reprodutor mpv…')
   player = spawn(mpvPath, [
     '--really-quiet',
     '--loop=no',
     '--ontop',
-    '--term-playing-msg=MPV_STARTED_PLAYING',
+    `--input-ipc-server=${ipcSocketPath}`,
     url,
-  ], { stdio: ['ignore', 'pipe', 'inherit'] })
+  ], { stdio: 'inherit' })
 
-  player.stdout.on('data', chunk => {
-    if (chunk.toString().includes('MPV_STARTED_PLAYING')) {
-      console.log('STATUS:PLAYING Reproduzindo no mpv')
-    }
-  })
+  let ipcSocket
+  let playingEmitted = false
+  let attempts = 0
+  const connectIpc = () => {
+    attempts++
+    ipcSocket = createConnection(ipcSocketPath)
+    ipcSocket.on('connect', () => {
+      ipcSocket.on('data', chunk => {
+        const text = chunk.toString('utf-8')
+        if (!playingEmitted && (text.includes('"playback-restart"') || text.includes('"file-loaded"'))) {
+          playingEmitted = true
+          console.log('STATUS:PLAYING Reproduzindo no mpv')
+          ipcSocket.destroy()
+        }
+      })
+    })
+    ipcSocket.on('error', () => {
+      ipcSocket.destroy()
+      if (!playingEmitted && attempts < 100 && player && player.exitCode === null) {
+        setTimeout(connectIpc, 100)
+      }
+    })
+  }
+  setTimeout(connectIpc, 100)
 
   exitCode = await new Promise((resolve, reject) => {
     player.once('error', reject)
@@ -112,6 +135,10 @@ try {
   }
   try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
   try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
+  try {
+    const { unlinkSync } = await import('node:fs')
+    unlinkSync(join(outputPath, 'mpv.sock'))
+  } catch {}
 }
 
 process.exitCode = exitCode
