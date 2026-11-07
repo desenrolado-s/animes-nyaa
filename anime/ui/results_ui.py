@@ -351,14 +351,16 @@ class ResultsUI:
             play.set_tooltip_text(tr('Reproduzir esta release'))
             play.connect('clicked', lambda *_args, selected=item: self.play_item(selected))
             row.add_suffix(play)
-            list_row = Gtk.ListBoxRow(child=row)
-            list_row.set_activatable(True)
-            list_row.connect('activate', lambda selected: self.release_list.select_row(selected))
-            self.release_list.append(list_row)
+            row.set_activatable(True)
+            self.release_list.append(row)
+        active_ep = getattr(self, 'active_episode', None)
         if rows:
-            self.show_notice(tr(f'{len(rows)} releases encontradas para o episódio {self.active_episode:02d}.'))
-        elif self.active_episode:
-            self.show_notice(tr(f'Nenhuma release individual encontrada para o episódio {self.active_episode:02d}. Confira a aba Batches.'))
+            if active_ep is not None:
+                self.show_notice(tr(f'{len(rows)} releases encontradas para o episódio {active_ep:02d}.'))
+            else:
+                self.show_notice(tr(f'{len(rows)} releases encontradas.'))
+        elif active_ep is not None:
+            self.show_notice(tr(f'Nenhuma release individual encontrada para o episódio {active_ep:02d}. Confira a aba Batches.'))
         else:
             self.show_notice('Nenhum torrent encontrado para esta busca.')
         return False

@@ -79,3 +79,15 @@ class DetailLayoutTests(unittest.TestCase):
         self.assertEqual(self.app.anime_tabs.get_visible_child_name(), 'episodes')
         self.assertEqual(self.app.episode_tab_stack.get_visible_child_name(), 'episodes')
         self.assertEqual(self.app.batch_view.get_visible_child_name(), 'catalog')
+
+    def test_finish_releases_handles_none_active_episode(self):
+        self.app.active_episode = None
+        releases = [{'title': 'Release 1', 'size': '1 GB', 'seeders': '10', 'leechers': '2', 'downloads': '5', 'magnet': 'magnet:?'}]
+        self.app.finish_releases(releases, None)
+        self.assertEqual(len(self.app.results), 1)
+
+    def test_finish_releases_handles_valid_active_episode(self):
+        self.app.active_episode = 1
+        releases = [{'title': 'Release 1', 'size': '1 GB', 'seeders': '10', 'leechers': '2', 'downloads': '5', 'magnet': 'magnet:?'}]
+        self.app.finish_releases(releases, None)
+        self.assertEqual(len(self.app.results), 1)
