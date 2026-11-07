@@ -2,6 +2,7 @@
 import re
 import shutil
 import subprocess
+import tempfile
 
 VIDEO_EXTENSIONS = {
     '.avi', '.m2ts', '.m4v', '.mkv', '.mov', '.mp4', '.mpeg', '.mpg',
@@ -14,13 +15,15 @@ def list_video_files(magnet, timeout=120):
     executable = shutil.which('webtorrent')
     if not executable:
         raise RuntimeError('Instale webtorrent-cli para ver os episódios deste batch.')
-    try:
-        result = subprocess.run(
-            [executable, magnet, '--select', 'list', '--quiet', '--port', '0'],
-            capture_output=True, text=True, timeout=timeout, check=False,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError('O Nyaa demorou para entregar os dados do torrent. Tente novamente.') from error
+    with tempfile.TemporaryDirectory(prefix='anime-nyaa-list-') as temp_dir:
+        try:
+            result = subprocess.run(
+                [executable, magnet, '--select', 'list', '--quiet', '--port', '0'],
+                capture_output=True, text=True, timeout=timeout, check=False,
+                cwd=temp_dir,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError('O Nyaa demorou para entregar os dados do torrent. Tente novamente.') from error
     if result.returncode:
         message = result.stderr.strip() or result.stdout.strip() or 'Não foi possível ler os arquivos do torrent.'
         raise RuntimeError(message[-600:])

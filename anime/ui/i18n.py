@@ -108,9 +108,19 @@ _PT_TO_EN = {
     'Falha ao enviar os temas ao Last.fm: {error}': 'Failed to scrobble themes to Last.fm: {error}',
     'Falha ao reproduzir {title}: {reason}': 'Playback failed for {title}: {reason}',
     '({count} batches favoritos salvos. Clique em “Buscar batches” para atualizar.)': '({count} favorite batches saved. Click “Search batches” to refresh.)',
+    'Cancelar reprodução': 'Cancel playback',
+    'Conectando ao WebTorrent…': 'Connecting to WebTorrent…',
+    'Conectando aos peers do torrent…': 'Connecting to torrent peers…',
+    'Metadados carregados. Preparando episódio…': 'Metadata loaded. Preparing episode…',
+    'Abrindo o reprodutor mpv…': 'Opening mpv player…',
+    'Reproduzindo no mpv': 'Playing in mpv',
+    'Reprodução concluída': 'Playback finished',
+    'Reprodução cancelada.': 'Playback cancelled.',
+    'Fonte recomendada (grupo confiável)': 'Recommended source (trusted group)',
 }
 
 _PT_PATTERNS = (
+    (re.compile(r'Conectado a (\d+) peer\(s\)…'), 'Connected to {} peer(s)…'),
     (re.compile(r'Falha ao consultar AniList: (.+)'), 'AniList lookup failed: {}'),
     (re.compile(r'Falha ao consultar batches no Nyaa: (.+)'), 'Failed to search batches on Nyaa: {}'),
     (re.compile(r'Falha ao consultar Nyaa: (.+)'), 'Nyaa lookup failed: {}'),

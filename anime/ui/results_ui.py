@@ -1,4 +1,5 @@
 """Nyaa result lists, batch file browsing and mpv playback."""
+import atexit
 import os
 import shutil
 import subprocess
@@ -22,6 +23,7 @@ from .i18n import tr
 
 BATCH_ROW_RENDER_BATCH_SIZE = 30
 BATCH_FILE_RENDER_BATCH_SIZE = 40
+ACTIVE_PLAYBACK_DIRECTORIES = set()
 
 
 class ResultsUI:
@@ -255,7 +257,12 @@ class ResultsUI:
         return False
 
     def sort_batches_by_favorite(self, rows):
-        return sorted(rows, key=lambda item: not library.is_favorite_batch(self.current_anime, item))
+        def _sort_key(item):
+            is_fav = library.is_favorite_batch(self.current_anime, item)
+            is_trusted = nyaa.is_trusted_group(item.get('title', ''))
+            return (0 if is_fav else (1 if is_trusted else 2))
+
+        return sorted(rows, key=_sort_key)
 
     def render_batch_rows(self):
         self.clear_batch_rows()
@@ -272,7 +279,12 @@ class ResultsUI:
                 title=item['title'] or tr('Batch sem título'),
                 subtitle=f"{item['size']}   ·   ↑ {item['seeders']}   ·   ↓ {item['leechers']}   ·   {item['downloads']} downloads",
             )
-            row.add_prefix(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
+            if nyaa.is_trusted_group(item.get('title', '')):
+                trusted_icon = Gtk.Image.new_from_icon_name('emblem-default-symbolic')
+                trusted_icon.set_tooltip_text(tr('Fonte recomendada (grupo confiável)'))
+                row.add_prefix(trusted_icon)
+            else:
+                row.add_prefix(Gtk.Image.new_from_icon_name('folder-videos-symbolic'))
             favorite = library.is_favorite_batch(self.current_anime, item)
             favorite_button = Gtk.Button.new_from_icon_name('starred-symbolic' if favorite else 'non-starred-symbolic')
             favorite_button.add_css_class('flat')
@@ -294,6 +306,7 @@ class ResultsUI:
         if error:
             self.show_notice(tr(f'Falha ao consultar Nyaa: {error}'))
             return False
+        rows = nyaa.sort_releases_by_trusted(rows)
         self.results = rows
         if searched is not None:
             self.search_trace.set_text(tr('Consultas: ') + '  ·  '.join(searched))
@@ -305,7 +318,12 @@ class ResultsUI:
             seeders = Gtk.Label(label=f"↑ {item['seeders']}")
             seeders.add_css_class('success')
             seeders.add_css_class('numeric')
-            row.add_prefix(Gtk.Image.new_from_icon_name('package-x-generic-symbolic'))
+            if nyaa.is_trusted_group(title):
+                trusted_icon = Gtk.Image.new_from_icon_name('emblem-default-symbolic')
+                trusted_icon.set_tooltip_text(tr('Fonte recomendada (grupo confiável)'))
+                row.add_prefix(trusted_icon)
+            else:
+                row.add_prefix(Gtk.Image.new_from_icon_name('package-x-generic-symbolic'))
             row.add_suffix(seeders)
             leechers = Gtk.Label(label=f"↓ {item['leechers']}")
             leechers.add_css_class('dim-label')
@@ -440,6 +458,7 @@ class ResultsUI:
             temporary_directory = settings.temporary_directory()
             temporary_directory.mkdir(parents=True, exist_ok=True)
             playback_directory = Path(tempfile.mkdtemp(prefix='anime-nyaa-', dir=temporary_directory))
+            ACTIVE_PLAYBACK_DIRECTORIES.add(playback_directory)
             helper = Path(__file__).resolve().parents[1] / 'services' / 'stream_episode.mjs'
             command = [node, str(helper), webtorrent, item['magnet'],
                        str(file_index) if file_index is not None else '-1',
@@ -459,8 +478,13 @@ class ResultsUI:
                 env=child_environment,
                 start_new_session=True,
             )
+            try:
+                (playback_directory / 'session.pid').write_text(str(process.pid), encoding='ascii')
+            except OSError:
+                pass
         except (OSError, KeyError, ValueError) as exc:
             if playback_directory is not None:
+                ACTIVE_PLAYBACK_DIRECTORIES.discard(playback_directory)
                 shutil.rmtree(playback_directory, ignore_errors=True)
             self.show_notice(tr(f'Não foi possível iniciar a reprodução: {exc}'))
             return
@@ -491,11 +515,18 @@ class ResultsUI:
                 target=self.scrobble_episode_themes,
                 args=(anime_id, episode_number, anime_title, credentials, int(time.time())), daemon=True,
             ).start()
+        session_id = getattr(self, 'playback_session_counter', 0) + 1
+        self.playback_session_counter = session_id
+        self.current_playback_session_id = session_id
         threading.Thread(
             target=self.monitor_playback,
-            args=(process, file_name or item['title'], playback_directory), daemon=True,
+            args=(process, file_name or item['title'], playback_directory, session_id), daemon=True,
         ).start()
-        self.show_notice(tr(f'Abrindo no mpv: {file_name or item["title"]}'))
+        display_title = file_name or item.get('title', 'Anime')
+        if hasattr(self, 'show_playback_status'):
+            self.show_playback_status(display_title, tr('Conectando ao WebTorrent…'), process, session_id=session_id)
+        else:
+            self.show_notice(tr(f'Abrindo no mpv: {display_title}'))
 
     def scrobble_episode_themes(self, anime_id, episode_number, anime_title, credentials, timestamp):
         try:
@@ -516,15 +547,39 @@ class ResultsUI:
             lastfm_progress.release(anime_id, episode_number)
             GLib.idle_add(self.show_notice, tr(f'Falha ao enviar os temas ao Last.fm: {exc}'))
 
-    def monitor_playback(self, process, title, playback_directory=None):
+    def monitor_playback(self, process, title, playback_directory=None, session_id=None):
+        output_lines = []
         try:
-            output, _ = process.communicate()
-            if process.returncode:
-                details = (output or '').strip().splitlines()
-                reason = '\n'.join(details[-4:])[-500:] if details else tr(f'WebTorrent encerrou com código {process.returncode}.')
-                GLib.idle_add(self.show_notice, tr(f'Falha ao reproduzir {title}: {reason}'))
+            if process.stdout:
+                for line in iter(process.stdout.readline, ''):
+                    output_lines.append(line)
+                    line_clean = line.strip()
+                    if line_clean.startswith('STATUS:'):
+                        status = line_clean[len('STATUS:'):].strip()
+                        if status.startswith('PLAYING'):
+                            msg = status[len('PLAYING'):].strip() or tr('Reproduzindo no mpv')
+                            if hasattr(self, 'update_playback_status'):
+                                GLib.idle_add(self.update_playback_status, msg, True, session_id)
+                        else:
+                            if hasattr(self, 'update_playback_status'):
+                                GLib.idle_add(self.update_playback_status, tr(status), False, session_id)
+            process.wait()
+            cancelled = session_id in getattr(self, 'cancelled_playback_sessions', ())
+            if getattr(self, 'cancelled_playback_sessions', None) and session_id in self.cancelled_playback_sessions:
+                self.cancelled_playback_sessions.discard(session_id)
+            if process.returncode != 0:
+                if not cancelled:
+                    if hasattr(self, 'dismiss_playback_status'):
+                        GLib.idle_add(self.dismiss_playback_status, session_id)
+                    details = ''.join(output_lines).strip().splitlines()
+                    reason = '\n'.join(details[-4:])[-500:] if details else tr(f'WebTorrent encerrou com código {process.returncode}.')
+                    GLib.idle_add(self.show_notice, tr(f'Falha ao reproduzir {title}: {reason}'))
+            else:
+                if hasattr(self, 'update_playback_status'):
+                    GLib.idle_add(self.update_playback_status, tr('Reprodução concluída'), True, session_id)
         finally:
             if playback_directory is not None:
+                ACTIVE_PLAYBACK_DIRECTORIES.discard(playback_directory)
                 shutil.rmtree(playback_directory, ignore_errors=True)
 
     def open_page(self):

@@ -1,11 +1,14 @@
 """Offline tests for the application's parsing and local persistence."""
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from anime.services import lastfm, nyaa, torrent
 from anime.storage import history, lastfm_progress, settings, watch_progress
+from anime.ui.i18n import tr
 
 
 class SearchParsingTests(unittest.TestCase):
@@ -25,6 +28,27 @@ class SearchParsingTests(unittest.TestCase):
         self.assertTrue(nyaa.matches_episode('Show S02E003 1080p', 3))
         self.assertFalse(nyaa.matches_episode('Show S02E013 1080p', 3))
         self.assertTrue(nyaa.is_batch_title('Show Complete 01-24'))
+
+    def test_trusted_group_detection_and_sorting(self):
+        self.assertTrue(nyaa.is_trusted_group('[Erai-raws] Jujutsu Kaisen - 01 [1080p]'))
+        self.assertTrue(nyaa.is_trusted_group('(Erai-Raws) Jujutsu Kaisen - 01'))
+        self.assertTrue(nyaa.is_trusted_group('[feibanyama] One Piece 1000'))
+        self.assertFalse(nyaa.is_trusted_group('[OtherGroup] Bleach 01'))
+        self.assertFalse(nyaa.is_trusted_group('[Not-Erai-Raws] Jujutsu Kaisen - 01'))
+        self.assertFalse(nyaa.is_trusted_group('[Fake-feibanyama] One Piece 1000'))
+        self.assertFalse(nyaa.is_trusted_group('[feibanyama-fake] One Piece 1000'))
+
+        releases = [
+            {'title': '[OtherGroup] Show - 01', 'seeders': 100},
+            {'title': '[Erai-raws] Show - 01', 'seeders': 50},
+            {'title': '[feibanyama] Show - 01', 'seeders': 30},
+            {'title': '[Random] Show - 01', 'seeders': 120},
+        ]
+        sorted_releases = nyaa.sort_releases_by_trusted(releases)
+        self.assertEqual(sorted_releases[0]['title'], '[Erai-raws] Show - 01')
+        self.assertEqual(sorted_releases[1]['title'], '[feibanyama] Show - 01')
+        self.assertEqual(sorted_releases[2]['title'], '[OtherGroup] Show - 01')
+        self.assertEqual(sorted_releases[3]['title'], '[Random] Show - 01')
 
     def test_torrent_listing_filters_video_files_and_finds_episode(self):
         result = type('Result', (), {'returncode': 0,
@@ -57,6 +81,34 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(settings.lastfm_credentials()['username'], 'listener')
         self.assertFalse(settings.lastfm_credentials()['enabled'])
         self.assertEqual(settings.settings_path().stat().st_mode & 0o777, 0o600)
+
+    def test_cleanup_temporary_directory_removes_stale_folders(self):
+        custom_dir = self.home / 'custom_downloads'
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        settings.set_temporary_directory(str(custom_dir))
+
+        # 1. Directory with dead PID -> should be removed
+        dead_dir = custom_dir / 'anime-nyaa-dead'
+        dead_dir.mkdir(parents=True, exist_ok=True)
+        (dead_dir / 'session.pid').write_text('999999')
+
+        # 2. Directory with active PID (current test process) -> must be preserved
+        live_dir = custom_dir / 'anime-nyaa-live'
+        live_dir.mkdir(parents=True, exist_ok=True)
+        (live_dir / 'session.pid').write_text(str(os.getpid()))
+
+        # 3. Old directory without PID -> should be removed
+        stale_dir = custom_dir / 'anime-nyaa-stale123'
+        stale_dir.mkdir(parents=True, exist_ok=True)
+        (stale_dir / 'sample.mkv').write_text('dummy')
+
+        # Patch time so stale_dir exceeds min_age_seconds
+        with patch('time.time', return_value=time.time() + 1000):
+            settings.cleanup_temporary_directory(min_age_seconds=300)
+
+        self.assertFalse(dead_dir.exists())
+        self.assertFalse(stale_dir.exists())
+        self.assertTrue(live_dir.exists())
 
     def test_watch_progress_and_history_round_trip(self):
         self.assertTrue(watch_progress.mark_watched(12, 4))
@@ -91,6 +143,53 @@ class LastFmTests(unittest.TestCase):
 
     def test_authorization_url_encodes_token(self):
         self.assertIn('token=a+b', lastfm.authorization_url('key', 'a b'))
+
+
+class PlaybackStatusTests(unittest.TestCase):
+    def test_status_translations(self):
+        settings.set_language('en')
+        self.assertEqual(tr('Cancelar reprodução'), 'Cancel playback')
+        self.assertEqual(tr('Conectando ao WebTorrent…'), 'Connecting to WebTorrent…')
+        self.assertEqual(tr('Conectando aos peers do torrent…'), 'Connecting to torrent peers…')
+        self.assertEqual(tr('Conectado a 5 peer(s)…'), 'Connected to 5 peer(s)…')
+        self.assertEqual(tr('Reproduzindo no mpv'), 'Playing in mpv')
+        self.assertEqual(tr('Reprodução cancelada.'), 'Playback cancelled.')
+        settings.set_language('pt')
+        self.assertEqual(tr('Cancelar reprodução'), 'Cancelar reprodução')
+
+    def test_session_isolation_ignores_stale_events(self):
+        from unittest.mock import MagicMock
+
+        class PlaybackSessionTracker:
+            def __init__(self):
+                self.current_playback_session_id = 2
+                self.playback_status_label = MagicMock()
+                self.playback_revealer = MagicMock()
+
+            def update_playback_status(self, status_text, is_playing=False, session_id=None):
+                if session_id is not None and session_id != self.current_playback_session_id:
+                    return False
+                self.playback_status_label.set_text(status_text)
+                return False
+
+            def dismiss_playback_status(self, session_id=None):
+                if session_id is not None and session_id != self.current_playback_session_id:
+                    return False
+                self.playback_revealer.set_reveal_child(False)
+                return False
+
+        tracker = PlaybackSessionTracker()
+        # Stale event and dismiss for session 1 should be ignored
+        tracker.update_playback_status('Old message', is_playing=False, session_id=1)
+        tracker.playback_status_label.set_text.assert_not_called()
+        tracker.dismiss_playback_status(session_id=1)
+        tracker.playback_revealer.set_reveal_child.assert_not_called()
+
+        # Current event and dismiss for session 2 should be applied
+        tracker.update_playback_status('New message', is_playing=False, session_id=2)
+        tracker.playback_status_label.set_text.assert_called_with('New message')
+        tracker.dismiss_playback_status(session_id=2)
+        tracker.playback_revealer.set_reveal_child.assert_called_with(False)
 
 
 if __name__ == '__main__':
