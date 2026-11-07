@@ -12,6 +12,12 @@ if (!cliPath || !magnet || !Number.isInteger(index) || index < -1 || !outputPath
   process.exit(2)
 }
 
+try {
+  const { writeFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  writeFileSync(join(outputPath, 'session.pid'), String(process.pid))
+} catch {}
+
 const requireFromCli = createRequire(realpathSync(cliPath))
 const webtorrentModule = requireFromCli.resolve('webtorrent')
 const { default: WebTorrent } = await import(pathToFileURL(webtorrentModule).href)
@@ -37,6 +43,28 @@ function waitFor(emitter, successEvent) {
 
 let player
 let exitCode = 0
+
+async function cleanupStorage() {
+  if (outputPath && outputPath.includes('anime-nyaa-')) {
+    try {
+      const { rmSync } = await import('node:fs')
+      rmSync(outputPath, { recursive: true, force: true })
+    } catch {}
+  }
+}
+
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.once(signal, async () => {
+    if (player && player.exitCode === null && player.signalCode === null) {
+      player.kill('SIGTERM')
+    }
+    try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
+    try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
+    await cleanupStorage()
+    process.exit(1)
+  })
+}
+
 try {
   const ready = torrent.ready ? Promise.resolve() : waitFor(torrent, 'ready')
   const listening = waitFor(server, 'listening')
@@ -67,6 +95,7 @@ try {
   if (player && player.exitCode === null && player.signalCode === null) player.kill('SIGTERM')
   try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
   try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
+  await cleanupStorage()
 }
 
 process.exitCode = exitCode
