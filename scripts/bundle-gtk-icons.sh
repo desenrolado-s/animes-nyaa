@@ -2,8 +2,35 @@
 set -euo pipefail
 
 destination=${1:?Usage: bundle-gtk-icons.sh DESTINATION_DIRECTORY}
-icon_theme=${ADWAITA_ICON_THEME_DIR:-/usr/share/icons/Adwaita}
-copyright_file=${ADWAITA_ICON_COPYRIGHT_FILE:-/usr/share/doc/adwaita-icon-theme/copyright}
+icon_theme=${ADWAITA_ICON_THEME_DIR:-}
+if [[ -z "$icon_theme" ]]; then
+  for candidate in \
+    /usr/share/icons/Adwaita \
+    "${MINGW_PREFIX:-/ucrt64}/share/icons/Adwaita" \
+    /mingw64/share/icons/Adwaita; do
+    if [[ -d "$candidate/symbolic" ]]; then
+      icon_theme="$candidate"
+      break
+    fi
+  done
+  icon_theme=${icon_theme:-/usr/share/icons/Adwaita}
+fi
+
+copyright_file=${ADWAITA_ICON_COPYRIGHT_FILE:-}
+if [[ -z "$copyright_file" ]]; then
+  for candidate in \
+    /usr/share/doc/adwaita-icon-theme/copyright \
+    "${MINGW_PREFIX:-/ucrt64}/share/licenses/adwaita-icon-theme/COPYING" \
+    "${MINGW_PREFIX:-/ucrt64}/share/licenses/adwaita-icon-theme/COPYING_LGPL" \
+    "${MINGW_PREFIX:-/ucrt64}/share/licenses/adwaita-icon-theme/LICENSE" \
+    /mingw64/share/licenses/adwaita-icon-theme/COPYING; do
+    if [[ -s "$candidate" ]]; then
+      copyright_file="$candidate"
+      break
+    fi
+  done
+  copyright_file=${copyright_file:-/usr/share/doc/adwaita-icon-theme/copyright}
+fi
 
 if [[ ! -d "$icon_theme/symbolic" ]]; then
   echo "Adwaita symbolic icons were not found at $icon_theme." >&2

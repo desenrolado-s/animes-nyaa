@@ -3,6 +3,7 @@ import atexit
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -510,7 +511,8 @@ class ResultsUI:
 
     def play_item(self, item, use_current_anime=True, file_index=None, file_name=None,
                   episode_number=None):
-        webtorrent = shutil.which('webtorrent')
+        raw_webtorrent = shutil.which('webtorrent')
+        webtorrent = torrent.resolve_webtorrent_cli_script(raw_webtorrent) or raw_webtorrent
         node = shutil.which('node')
         mpv = shutil.which('mpv')
         if not mpv:
@@ -538,11 +540,20 @@ class ResultsUI:
                 child_environment['LD_LIBRARY_PATH'] = original_library_path
             else:
                 child_environment.pop('LD_LIBRARY_PATH', None)
+            popen_kwargs = {}
+            if sys.platform == 'win32':
+                popen_kwargs['creationflags'] = (
+                    getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                    | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+                )
+            else:
+                popen_kwargs['start_new_session'] = True
             process = subprocess.Popen(
                 command, cwd=str(Path.home()), stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace',
                 env=child_environment,
-                start_new_session=True,
+                **popen_kwargs,
             )
             try:
                 (playback_directory / 'session.pid').write_text(str(process.pid), encoding='ascii')

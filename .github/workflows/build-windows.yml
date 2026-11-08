@@ -1,0 +1,108 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: [main, dev, build-windows]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2 UCRT64 and GTK4/Libadwaita dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-pip
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-cairo
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-adwaita-icon-theme
+            mingw-w64-ucrt-x86_64-gdk-pixbuf2
+            mingw-w64-ucrt-x86_64-librsvg
+            mingw-w64-ucrt-x86_64-mpv
+            mingw-w64-ucrt-x86_64-pyinstaller
+            unzip
+            zip
+
+      - name: Run offline tests
+        env:
+          NO_AT_BRIDGE: '1'
+          GTK_A11Y: none
+          GSK_RENDERER: cairo
+        run: /ucrt64/bin/python.exe -m unittest discover -s tests -v
+
+      - name: Build Windows executable bundle
+        run: |
+          /ucrt64/bin/pyinstaller.exe --noconfirm --clean anime-nyaa.spec
+          bash scripts/bundle-windows-runtime.sh dist/anime-nyaa/_internal
+          bash scripts/bundle-gtk-icons.sh dist/anime-nyaa/_internal/share/icons
+          bash scripts/bundle-ca-certificates.sh dist/anime-nyaa/_internal/certs
+          bash scripts/bundle-gtk-typelibs.sh dist/anime-nyaa/_internal/gi_typelibs
+          bash scripts/bundle-node-webtorrent.sh dist/anime-nyaa/_internal
+          cp packaging/linux/anime-nyaa.png dist/anime-nyaa/
+          cat > dist/anime-nyaa/README.txt <<'EOF'
+          Anime Nyaa Windows executable bundle
+
+          Run anime-nyaa.exe to start the application.
+          GTK 4, Libadwaita, mpv, Node.js, and WebTorrent CLI are included in the bundle.
+          Adwaita icon copyright and license are in _internal/licenses.
+          EOF
+
+      - name: Verify bundled Node.js, WebTorrent CLI, and mpv
+        run: |
+          node=dist/anime-nyaa/_internal/node/node.exe
+          cli=dist/anime-nyaa/_internal/webtorrent-cli/node_modules/webtorrent-cli/bin/cmd.js
+          helper=dist/anime-nyaa/_internal/anime/services/stream_episode.mjs
+          mpv=dist/anime-nyaa/_internal/mpv.exe
+          "$node" --version
+          "$node" "$cli" --help >/dev/null
+          test -s "$helper"
+          "$node" --check "$helper"
+          (cd dist/anime-nyaa/_internal/webtorrent-cli && \
+            "$OLDPWD/$node" --input-type=module -e "import('node-datachannel')")
+          "$mpv" --version >/dev/null
+
+      - name: Smoke test packaged Windows GTK app
+        timeout-minutes: 3
+        env:
+          NO_AT_BRIDGE: '1'
+          GTK_A11Y: none
+          GSK_RENDERER: cairo
+        run: |
+          set -o pipefail
+          dist/anime-nyaa/anime-nyaa.exe --smoke-test 2>&1 | tee /tmp/anime-nyaa-windows-smoke.log
+          if grep -q 'Traceback (most recent call last):' /tmp/anime-nyaa-windows-smoke.log; then
+            echo 'The packaged Windows GTK startup logged a Python traceback.' >&2
+            exit 1
+          fi
+          if grep -Eq 'AdwActionRow .* placed into GtkBox' /tmp/anime-nyaa-windows-smoke.log; then
+            echo 'The packaged Windows GTK app placed an Adw.ActionRow into an unsupported GtkBox.' >&2
+            exit 1
+          fi
+
+      - name: Package Windows zip archive
+        run: |
+          (cd dist && zip -qr anime-nyaa-windows-x86_64.zip anime-nyaa)
+          ls -lh dist/anime-nyaa-windows-x86_64.zip
+
+      - name: Upload Windows build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anime-nyaa-windows-x86_64
+          path: dist/anime-nyaa-windows-x86_64.zip
+          if-no-files-found: error

@@ -1,5 +1,6 @@
 """Offline tests for the application's parsing and local persistence."""
 import os
+import sys
 import tempfile
 import time
 import unittest
@@ -61,6 +62,23 @@ class SearchParsingTests(unittest.TestCase):
             ])
         self.assertEqual(torrent.episode_number('Show S02E03.mkv'), 3)
 
+    def test_windows_cmd_wrapper_resolves_to_underlying_node_script(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            bin_dir = root_path / 'node_modules' / '.bin'
+            cli_dir = root_path / 'node_modules' / 'webtorrent-cli' / 'bin'
+            bin_dir.mkdir(parents=True)
+            cli_dir.mkdir(parents=True)
+            cmd_wrapper = bin_dir / 'webtorrent.cmd'
+            cmd_script = cli_dir / 'cmd.js'
+            cmd_wrapper.write_text('@ECHO off\n', encoding='utf-8')
+            cmd_script.write_text('console.log("ok")\n', encoding='utf-8')
+
+            self.assertEqual(
+                Path(torrent.resolve_webtorrent_cli_script(str(cmd_wrapper))),
+                cmd_script.resolve(),
+            )
+
 
 class PersistenceTests(unittest.TestCase):
     def setUp(self):
@@ -77,10 +95,13 @@ class PersistenceTests(unittest.TestCase):
         settings.set_temporary_directory('/tmp/media')
         settings.set_lastfm_credentials('key', 'secret', session_key='session',
                                         username='listener', enabled=False)
-        self.assertEqual(settings.temporary_directory(), Path('/tmp/media'))
+        self.assertEqual(settings.temporary_directory(), Path('/tmp/media').resolve())
         self.assertEqual(settings.lastfm_credentials()['username'], 'listener')
         self.assertFalse(settings.lastfm_credentials()['enabled'])
-        self.assertEqual(settings.settings_path().stat().st_mode & 0o777, 0o600)
+        if sys.platform != 'win32':
+            self.assertEqual(settings.settings_path().stat().st_mode & 0o777, 0o600)
+        else:
+            self.assertTrue(settings.settings_path().is_file())
 
     def test_cleanup_temporary_directory_removes_stale_folders(self):
         custom_dir = self.home / 'custom_downloads'

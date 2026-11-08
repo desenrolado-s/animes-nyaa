@@ -3,10 +3,12 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
+import tempfile
 import time
 
 
-DEFAULT_TEMP_DIRECTORY = Path('/tmp')
+DEFAULT_TEMP_DIRECTORY = Path(tempfile.gettempdir()) if sys.platform == 'win32' else Path('/tmp')
 
 
 def settings_path():
@@ -28,6 +30,20 @@ def temporary_directory():
 def _is_process_alive(pid):
     if not isinstance(pid, int) or pid <= 0:
         return False
+    if sys.platform == 'win32':
+        import ctypes
+        process_query_limited_information = 0x1000
+        still_active = 259
+        handle = ctypes.windll.kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            if ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return exit_code.value == still_active
+            return False
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
         return True
