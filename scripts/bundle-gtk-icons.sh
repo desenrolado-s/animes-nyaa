@@ -23,7 +23,8 @@ if [[ -z "$copyright_file" ]]; then
     "${MINGW_PREFIX:-/ucrt64}/share/licenses/adwaita-icon-theme/COPYING" \
     "${MINGW_PREFIX:-/ucrt64}/share/licenses/adwaita-icon-theme/COPYING_LGPL" \
     "${MINGW_PREFIX:-/ucrt64}/share/licenses/adwaita-icon-theme/LICENSE" \
-    /mingw64/share/licenses/adwaita-icon-theme/COPYING; do
+    /mingw64/share/licenses/adwaita-icon-theme/COPYING \
+    /usr/share/licenses/spdx/LGPL-3.0-only.txt; do
     if [[ -s "$candidate" ]]; then
       copyright_file="$candidate"
       break
@@ -60,7 +61,17 @@ if [[ ${#icon_names[@]} -eq 0 ]]; then
 fi
 
 for icon_name in "${icon_names[@]}"; do
-  source_icon=$(find "$icon_theme/symbolic" -type f -name "$icon_name.svg" -print -quit)
+  source_icon=$(find "$icon_theme/symbolic" \( -type f -o -type l \) -name "$icon_name.svg" -print -quit)
+  if [[ -z "$source_icon" ]]; then
+    case "$icon_name" in
+      emblem-default-symbolic)
+        source_icon=$(find "$icon_theme/symbolic" \( -type f -o -type l \) \( -name 'selection-mode-symbolic.svg' -o -name 'object-select-symbolic.svg' \) -print -quit)
+        ;;
+      emblem-ok-symbolic)
+        source_icon=$(find "$icon_theme/symbolic" \( -type f -o -type l \) \( -name 'object-select-symbolic.svg' -o -name 'selection-mode-symbolic.svg' \) -print -quit)
+        ;;
+    esac
+  fi
   if [[ -z "$source_icon" ]]; then
     echo "Missing Adwaita symbolic icon: $icon_name" >&2
     exit 1
