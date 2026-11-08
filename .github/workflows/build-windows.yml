@@ -208,6 +208,41 @@ jobs:
             dist/SHA256SUMS-windows.txt
           if-no-files-found: error
 
+  verify-clean-windows:
+    needs: [build-windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: anime-nyaa-windows-installer
+          path: installer
+      - name: Install and verify on a fresh Windows runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PATH = "$env:SystemRoot\system32;$env:SystemRoot"
+          $env:GSK_RENDERER = 'cairo'
+          $env:GTK_A11Y = 'none'
+          $installDir = Join-Path $env:RUNNER_TEMP 'Anime Nyaa clean test'
+          $installer = (Get-ChildItem installer\*.exe | Select-Object -First 1).FullName
+          $install = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/DIR="' + $installDir + '"')) -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exit code: $($install.ExitCode)" }
+          $exe = Join-Path $installDir 'anime-nyaa.exe'
+          if (!(Test-Path $exe)) { throw "Installed executable missing: $exe" }
+          $app = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -WorkingDirectory $env:RUNNER_TEMP -PassThru
+          if (!$app.WaitForExit(60000)) { $app.Kill(); throw 'Installed app smoke test timed out' }
+          if ($app.ExitCode -ne 0) { throw "Installed app exit code: $($app.ExitCode)" }
+          $internal = Join-Path $installDir '_internal'
+          $node = Join-Path $internal 'node\node.exe'
+          $cli = Join-Path $internal 'webtorrent-cli\node_modules\webtorrent-cli\bin\cmd.js'
+          & $node --version
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled Node failed' }
+          & $node $cli --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled WebTorrent CLI failed' }
+          & (Join-Path $internal 'mpv.exe') --version | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled mpv failed' }
+          Write-Host 'Fresh runner: installer, GUI smoke test, Node, WebTorrent CLI and mpv succeeded.'
+
   release-windows:
     needs: [reserve-version, build-windows]
     if: >-
