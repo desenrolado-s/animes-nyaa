@@ -1,4 +1,4 @@
-name: Build Windows app
+name: Build and release Windows app
 
 on:
   push:
@@ -11,7 +11,81 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        run: |
+          tag="v$(bash scripts/next-version.sh)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  reserve-version:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          tag_reserved=false
+          for attempt in $(seq 1 20); do
+            git fetch --force --tags origin
+            tag=$(git tag --points-at "$RELEASE_SHA" --list 'v[0-9]*' | sort -V | tail -n 1)
+            if [[ -n "$tag" ]]; then
+              tag_reserved=true
+              break
+            fi
+
+            tag="v$(bash scripts/next-version.sh)"
+            existing_sha=$(git rev-parse --verify "refs/tags/${tag}^{commit}" 2>/dev/null || true)
+            if [[ -n "$existing_sha" ]]; then
+              sleep 1
+              continue
+            fi
+            if gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" -f sha="${RELEASE_SHA}" >/dev/null; then
+              tag_reserved=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$tag_reserved" != true ]]; then
+            echo 'Could not reserve a version tag.' >&2
+            exit 1
+          fi
+          git fetch --force --tags origin
+          tag_sha=$(git rev-parse --verify "refs/tags/${tag}^{commit}")
+          if [[ "$tag_sha" != "$RELEASE_SHA" ]]; then
+            echo "Tag $tag points to $tag_sha, expected $RELEASE_SHA." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
   build-windows:
+    needs: [version, reserve-version]
+    if: >-
+      !cancelled() &&
+      (needs.version.result == 'success' || needs.reserve-version.result == 'success')
     runs-on: windows-latest
     defaults:
       run:
@@ -95,14 +169,77 @@ jobs:
             exit 1
           fi
 
-      - name: Package Windows zip archive
+      - name: Build Windows installer (.exe) and portable (.zip)
+        env:
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag || needs.version.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.reserve-version.outputs.version || needs.version.outputs.version }}
+          MSYS2_ARG_CONV_EXCL: '*'
         run: |
-          (cd dist && zip -qr anime-nyaa-windows-x86_64.zip anime-nyaa)
-          ls -lh dist/anime-nyaa-windows-x86_64.zip
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          "$iscc" \
+            "/DMyAppVersion=${RELEASE_VERSION}" \
+            "/DMyOutputBaseFilename=anime-nyaa-windows-x86_64-setup-${RELEASE_TAG}" \
+            "packaging/windows/anime-nyaa.iss"
+          (cd dist && zip -qr "anime-nyaa-windows-x86_64-${RELEASE_TAG}.zip" anime-nyaa)
+          (cd dist && sha256sum "anime-nyaa-windows-x86_64-setup-${RELEASE_TAG}.exe" "anime-nyaa-windows-x86_64-${RELEASE_TAG}.zip" > SHA256SUMS-windows.txt)
+          ls -lh "dist/anime-nyaa-windows-x86_64-setup-${RELEASE_TAG}.exe" "dist/anime-nyaa-windows-x86_64-${RELEASE_TAG}.zip" dist/SHA256SUMS-windows.txt
 
-      - name: Upload Windows build artifact
+      - name: Upload Windows installer (.exe) artifact
         uses: actions/upload-artifact@v4
         with:
-          name: anime-nyaa-windows-x86_64
-          path: dist/anime-nyaa-windows-x86_64.zip
+          name: anime-nyaa-windows-installer
+          path: dist/anime-nyaa-windows-x86_64-setup-*.exe
           if-no-files-found: error
+
+      - name: Upload Windows portable bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anime-nyaa-windows-portable
+          path: dist/anime-nyaa/*
+          if-no-files-found: error
+
+      - name: Upload Windows release assets artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anime-nyaa-windows-release-assets
+          path: |
+            dist/anime-nyaa-windows-x86_64-setup-*.exe
+            dist/anime-nyaa-windows-x86_64-*.zip
+            dist/SHA256SUMS-windows.txt
+          if-no-files-found: error
+
+  release-windows:
+    needs: [reserve-version, build-windows]
+    if: >-
+      !cancelled() &&
+      github.ref == 'refs/heads/main' &&
+      needs.reserve-version.result == 'success' &&
+      needs.build-windows.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: anime-nyaa-windows-release-assets
+          path: release-assets
+      - name: Publish Windows release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.reserve-version.outputs.tag }}
+        run: |
+          assets=(
+            release-assets/anime-nyaa-windows-x86_64-setup-*.exe
+            release-assets/anime-nyaa-windows-x86_64-*.zip
+            release-assets/SHA256SUMS-windows.txt
+          )
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "Anime Nyaa $RELEASE_TAG" \
+              --generate-notes
+          fi
