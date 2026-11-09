@@ -20,6 +20,12 @@ class MalUI:
         row = Adw.ActionRow(title=tr('ID do cliente MyAnimeList'))
         row.add_suffix(self.mal_client_entry)
         group.add(row)
+        self.mal_secret_entry = Gtk.PasswordEntry(hexpand=True)
+        self.mal_secret_entry.set_text(credentials['client_secret'])
+        self.mal_secret_entry.set_show_peek_icon(True)
+        row = Adw.ActionRow(title=tr('Segredo do cliente (se houver)'))
+        row.add_suffix(self.mal_secret_entry)
+        group.add(row)
         self.mal_redirect_entry = Gtk.Entry(text=credentials['redirect_uri'] or 'http://localhost:8765/callback', hexpand=True)
         row = Adw.ActionRow(title=tr('URL de redirecionamento'))
         row.add_suffix(self.mal_redirect_entry)
@@ -58,13 +64,14 @@ class MalUI:
 
     def start_mal_authorization(self, *_args):
         client_id = self.mal_client_entry.get_text().strip()
+        client_secret = self.mal_secret_entry.get_text().strip()
         redirect_uri = self.mal_redirect_entry.get_text().strip()
         parsed = urlparse(redirect_uri)
         if not client_id or parsed.scheme not in ('http', 'https') or not parsed.netloc or parsed.query or parsed.fragment:
             self.mal_status.set_text(tr('Informe o ID do cliente e uma URL de redirecionamento válida.'))
             return
         url, verifier, state = myanimelist.new_authorization(client_id, redirect_uri)
-        self._mal_authorization = (client_id, redirect_uri, verifier, state)
+        self._mal_authorization = (client_id, redirect_uri, verifier, state, client_secret)
         self.mal_callback_entry.set_text('')
         try:
             opened = webbrowser.open(url)
@@ -80,7 +87,7 @@ class MalUI:
         if not pending:
             self.mal_status.set_text(tr('Inicie a autorização primeiro.'))
             return
-        client_id, redirect_uri, verifier, state = pending
+        client_id, redirect_uri, verifier, state, client_secret = pending
         try:
             code = myanimelist.callback_code(self.mal_callback_entry.get_text(), redirect_uri, state)
         except ValueError as error:
@@ -91,7 +98,7 @@ class MalUI:
 
         def worker():
             try:
-                tokens = myanimelist.exchange_code(client_id, redirect_uri, verifier, code)
+                tokens = myanimelist.exchange_code(client_id, redirect_uri, verifier, code, client_secret)
                 username = myanimelist.user_name(tokens.get('access_token', ''))
                 if not username:
                     raise RuntimeError('MyAnimeList did not return a username')
@@ -108,7 +115,7 @@ class MalUI:
             self.mal_status.set_text(tr('Falha ao conectar ao MyAnimeList.'))
             return False
         try:
-            myanimelist.save_tokens(pending[0], pending[1], tokens, username=username)
+            myanimelist.save_tokens(pending[0], pending[1], tokens, username=username, client_secret=pending[4])
         except (OSError, ValueError, RuntimeError):
             self.mal_status.set_text(tr('Falha ao conectar ao MyAnimeList.'))
             return False

@@ -37,14 +37,22 @@ class MalTests(unittest.TestCase):
 
     def test_expired_token_refreshes_and_preserves_credentials(self):
         self.connect()
-        settings.set_mal_credentials(expires_at=0)
+        settings.set_mal_credentials(expires_at=0, client_secret='secret')
         with patch.object(myanimelist, '_request', return_value={
                 'access_token': 'new', 'refresh_token': 'new-refresh', 'expires_in': 3600}) as request:
             self.assertEqual(myanimelist.access_token(), 'new')
         self.assertEqual(request.call_args.args[1]['grant_type'], 'refresh_token')
+        self.assertEqual(request.call_args.args[1]['client_secret'], 'secret')
         self.assertEqual(settings.mal_credentials()['refresh_token'], 'new-refresh')
         self.assertEqual(settings.mal_credentials()['username'], 'alice')
         self.assertEqual(settings.settings_path().stat().st_mode & 0o777, 0o600)
+
+    def test_token_exchange_supports_clients_with_and_without_secret(self):
+        with patch.object(myanimelist, '_request', return_value={}) as request:
+            myanimelist.exchange_code('client', 'http://localhost/cb', 'verifier', 'code', 'secret')
+            self.assertEqual(request.call_args.args[1]['client_secret'], 'secret')
+            myanimelist.exchange_code('client', 'http://localhost/cb', 'verifier', 'code')
+            self.assertNotIn('client_secret', request.call_args.args[1])
 
     def test_request_updates_only_progress_via_patch(self):
         self.connect()

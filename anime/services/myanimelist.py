@@ -54,12 +54,15 @@ def _request(url, data=None, method=None, token=None):
         raise RuntimeError('Não foi possível acessar o MyAnimeList.') from error
 
 
-def exchange_code(client_id, redirect_uri, verifier, code):
-    return _request(TOKEN_URL, {'client_id': client_id, 'grant_type': 'authorization_code',
-                               'redirect_uri': redirect_uri, 'code_verifier': verifier, 'code': code})
+def exchange_code(client_id, redirect_uri, verifier, code, client_secret=''):
+    data = {'client_id': client_id, 'grant_type': 'authorization_code',
+            'redirect_uri': redirect_uri, 'code_verifier': verifier, 'code': code}
+    if client_secret:
+        data['client_secret'] = client_secret
+    return _request(TOKEN_URL, data)
 
 
-def save_tokens(client_id, redirect_uri, tokens, username=None):
+def save_tokens(client_id, redirect_uri, tokens, username=None, client_secret=None):
     access = tokens.get('access_token')
     refresh = tokens.get('refresh_token')
     if not access or not refresh:
@@ -69,6 +72,8 @@ def save_tokens(client_id, redirect_uri, tokens, username=None):
                    expires_at=time.time() + int(tokens.get('expires_in', 3600)))
     if username is not None:
         changes['username'] = username
+    if client_secret is not None:
+        changes['client_secret'] = client_secret
     settings.set_mal_credentials(**changes)
 
 
@@ -77,9 +82,11 @@ def access_token():
     if not creds['access_token'] or not creds['refresh_token']:
         raise RuntimeError('Conta MyAnimeList não conectada.')
     if creds['expires_at'] <= time.time() + 60:
-        tokens = _request(TOKEN_URL, {'client_id': creds['client_id'],
-                                      'grant_type': 'refresh_token',
-                                      'refresh_token': creds['refresh_token']})
+        data = {'client_id': creds['client_id'], 'grant_type': 'refresh_token',
+                'refresh_token': creds['refresh_token']}
+        if creds['client_secret']:
+            data['client_secret'] = creds['client_secret']
+        tokens = _request(TOKEN_URL, data)
         with _token_lock:
             current = settings.mal_credentials()
             if current['refresh_token'] != creds['refresh_token']:

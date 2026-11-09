@@ -7,6 +7,7 @@ from ..storage import settings
 _PT_TO_EN = {
     'Sincronize o progresso sequencial ao abrir ou assistir um anime.': 'Sync sequential progress when opening or watching an anime.',
     'ID do cliente MyAnimeList': 'MyAnimeList client ID',
+    'Segredo do cliente (se houver)': 'Client secret (if any)',
     'URL de redirecionamento': 'Redirect URL',
     'Aplicativo MyAnimeList': 'MyAnimeList application',
     'Crie um cliente de API e use a mesma URL de redirecionamento.': 'Create an API client and use the same redirect URL.',

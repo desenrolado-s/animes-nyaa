@@ -143,7 +143,8 @@ def set_lastfm_credentials(api_key, api_secret, session_key=None, username=None,
 
 def mal_credentials():
     value = load().get('myanimelist') or {}
-    return {'client_id': value.get('client_id', ''), 'redirect_uri': value.get('redirect_uri', ''),
+    return {'client_id': value.get('client_id', ''), 'client_secret': value.get('client_secret', ''),
+            'redirect_uri': value.get('redirect_uri', ''),
             'access_token': value.get('access_token', ''), 'refresh_token': value.get('refresh_token', ''),
             'expires_at': value.get('expires_at', 0), 'username': value.get('username', '')}
 
