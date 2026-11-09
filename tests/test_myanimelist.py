@@ -109,65 +109,73 @@ class MalTests(unittest.TestCase):
                 myanimelist.access_token()
         self.assertFalse(settings.mal_credentials()['refresh_token'])
 
-    def test_pending_changes_are_scoped_to_account(self):
+    def test_tracking_is_opt_in_and_scoped_to_account(self):
         self.connect()
-        mal_sync.change(10, [1], False)
-        alice_pending = mal_sync._pending_path()
+        with patch.object(myanimelist, 'get_list_status') as get_status:
+            self.assertFalse(mal_sync.sync({'id': 10, 'idMal': 20}, push_through=1))
+            get_status.assert_not_called()
+        self.assertTrue(mal_sync.set_tracked(10, True))
+        self.assertTrue(mal_sync.is_tracked(10))
         settings.set_mal_credentials(username='bob')
-        self.assertNotEqual(alice_pending, mal_sync._pending_path())
-        self.assertEqual(mal_sync._load_pending(), {})
+        self.assertFalse(mal_sync.is_tracked(10))
 
-    def test_import_and_manual_changes_preserve_gaps_and_remote_progress(self):
+    def test_open_tracked_anime_imports_without_remote_write(self):
         self.connect()
+        mal_sync.set_tracked(10, True)
         watch_progress.mark_watched(10, 7)
-        with patch.object(myanimelist, 'get_progress', return_value=4), \
+        with patch.object(myanimelist, 'get_list_status', return_value={'num_episodes_watched': 4}), \
              patch.object(myanimelist, 'set_progress') as update:
             self.assertTrue(mal_sync.sync({'id': 10, 'idMal': 20}))
             self.assertEqual(watch_progress.watched_episodes(10), {1, 2, 3, 4, 7})
             update.assert_not_called()
-        mal_sync.change(10, [3], False)
-        with patch.object(myanimelist, 'get_progress', return_value=4), \
-             patch.object(myanimelist, 'set_progress') as update:
-            mal_sync.sync({'id': 10, 'idMal': 20})
-            update.assert_called_once_with(20, 2)
-            self.assertEqual(watch_progress.watched_episodes(10), {1, 2, 4, 7})
 
-    def test_failed_update_retries_pending_without_reimporting_unwatched(self):
+    def test_automatic_tracking_never_decreases_large_remote_progress(self):
         self.connect()
-        watch_progress.set_watched(10, range(1, 5), True)
-        mal_sync.change(10, [2], False)
-        with patch.object(myanimelist, 'get_progress', return_value=4), \
-             patch.object(myanimelist, 'set_progress', side_effect=RuntimeError('offline')):
-            with self.assertRaises(RuntimeError):
-                mal_sync.sync({'id': 10, 'idMal': 20})
-        with patch.object(myanimelist, 'get_progress', return_value=4), \
+        mal_sync.set_tracked(21, True)
+        mal_sync.change(21, [1], False)
+        with patch.object(myanimelist, 'get_list_status', return_value={'num_episodes_watched': 1000}), \
              patch.object(myanimelist, 'set_progress') as update:
-            mal_sync.sync({'id': 10, 'idMal': 20})
-            update.assert_called_once_with(20, 1)
-            self.assertNotIn(2, watch_progress.watched_episodes(10))
-
-    def test_edits_during_request_are_not_lost(self):
-        self.connect()
-        def remote_update(_mal_id, _count):
-            mal_sync.change(10, [1], False)
-        mal_sync.change(10, [1, 2], True)
-        with patch.object(myanimelist, 'get_progress', return_value=0), \
-             patch.object(myanimelist, 'set_progress', side_effect=remote_update):
-            mal_sync.sync({'id': 10, 'idMal': 20})
-        with patch.object(myanimelist, 'get_progress', return_value=2), \
-             patch.object(myanimelist, 'set_progress') as update:
-            mal_sync.sync({'id': 10, 'idMal': 20})
-            update.assert_called_once_with(20, 0)
-            self.assertEqual(watch_progress.watched_episodes(10), {2})
-
-    def test_remote_reduction_is_imported_after_initial_sync(self):
-        self.connect()
-        with patch.object(myanimelist, 'get_progress', return_value=4), \
-             patch.object(myanimelist, 'set_progress'):
-            mal_sync.sync({'id': 10, 'idMal': 20})
-        watch_progress.mark_watched(10, 7)
-        with patch.object(myanimelist, 'get_progress', return_value=2), \
-             patch.object(myanimelist, 'set_progress') as update:
-            mal_sync.sync({'id': 10, 'idMal': 20})
-            self.assertEqual(watch_progress.watched_episodes(10), {1, 2, 7})
+            mal_sync.sync({'id': 21, 'idMal': 21}, push_through=1)
             update.assert_not_called()
+        self.assertIn(1000, watch_progress.watched_episodes(21))
+
+    def test_only_user_selected_new_progress_can_advance(self):
+        self.connect()
+        mal_sync.set_tracked(10, True)
+        watch_progress.set_watched(10, range(1, 101), True)
+        with patch.object(myanimelist, 'get_list_status', return_value={'num_episodes_watched': 4}), \
+             patch.object(myanimelist, 'set_progress') as update:
+            mal_sync.sync({'id': 10, 'idMal': 20}, push_through=5)
+            update.assert_called_once_with(20, 5)
+
+    def test_newer_remote_progress_is_never_overwritten_by_older_read(self):
+        self.connect()
+        mal_sync.set_tracked(21, True)
+        watch_progress.set_watched(21, range(1, 11), True)
+        with patch.object(myanimelist, 'get_list_status', side_effect=[
+                {'num_episodes_watched': 2}, {'num_episodes_watched': 300}]), \
+             patch.object(myanimelist, 'set_progress') as update:
+            mal_sync.sync({'id': 21, 'idMal': 21}, push_through=10)
+            update.assert_not_called()
+
+    def test_queued_automatic_update_is_cancelled_by_manual_edit(self):
+        self.connect()
+        mal_sync.set_tracked(10, True)
+        watch_progress.set_watched(10, range(1, 11), True)
+        revision = mal_sync.revision(10, 'alice')
+        mal_sync.reserve_manual_edit(10, 'alice')
+        with patch.object(myanimelist, 'get_list_status', return_value={'num_episodes_watched': 2}), \
+             patch.object(myanimelist, 'set_progress') as update:
+            self.assertFalse(mal_sync.sync({'id': 10, 'idMal': 20}, push_through=10, expected_revision=revision))
+            update.assert_not_called()
+
+    def test_manual_edit_forwards_rewatch_and_can_lower_progress(self):
+        self.connect()
+        mal_sync.set_tracked(10, True)
+        changes = {'num_watched_episodes': 3, 'is_rewatching': 'true', 'num_times_rewatched': 2}
+        with patch.object(myanimelist, 'update_list_status') as update:
+            mal_sync.save_manual(10, 20, 'alice', changes)
+            update.assert_called_once_with(20, changes)
+        mal_sync.set_tracked(10, False)
+        with self.assertRaises(RuntimeError):
+            mal_sync.save_manual(10, 20, 'alice', changes)

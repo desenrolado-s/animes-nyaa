@@ -15,7 +15,7 @@ class MalUI:
         credentials = settings.mal_credentials()
         group = Adw.PreferencesGroup(
             title='MyAnimeList',
-            description=tr('Sincronize o progresso sequencial ao abrir ou assistir um anime.'))
+            description=tr('Acompanhe apenas os animes que você escolher.'))
         self.mal_client_entry = Gtk.Entry(text=credentials['client_id'], hexpand=True)
         row = Adw.ActionRow(title=tr('ID do cliente MyAnimeList'))
         row.add_suffix(self.mal_client_entry)
@@ -173,25 +173,32 @@ class MalUI:
         self.mal_status.set_text(self.mal_status_text())
         self._mal_status_generation = getattr(self, '_mal_status_generation', 0) + 1
         if self.current_anime:
-            self.anime_mal_status.set_text(tr('Conecte sua conta nas configurações.'))
+            self.queue_mal_sync(self.current_anime)
 
-    def queue_mal_sync(self, media):
+    def queue_mal_sync(self, media, push_through=None):
         if not media:
             return
         media = dict(media)
         credentials = settings.mal_credentials()
         current = (self.current_anime or {}).get('id') == media.get('id')
+        tracked = bool(credentials['refresh_token'] and mal_sync.is_tracked(media.get('id')))
         generation = getattr(self, '_mal_status_generation', 0)
         if current:
             generation += 1
             self._mal_status_generation = generation
-            self.anime_mal_status.set_text(tr('Consultando MyAnimeList…') if credentials['refresh_token']
-                                           else tr('Conecte sua conta nas configurações.'))
-        if not credentials['refresh_token']:
+            self.mal_track_button.set_label(tr('Parar de acompanhar') if tracked else tr('Acompanhar no MyAnimeList'))
+            self.mal_track_button.set_sensitive(bool(credentials['refresh_token']))
+            self.mal_edit_button.set_sensitive(tracked)
+            self.anime_mal_status.set_text(
+                tr('Consultando MyAnimeList…') if tracked else
+                tr('Este anime não está vinculado.') if credentials['refresh_token'] else
+                tr('Conecte sua conta nas configurações.'))
+        if not tracked:
             return
+        revision = mal_sync.revision(media.get('id'), credentials['username'])
         def worker():
             try:
-                if mal_sync.sync(media):
+                if mal_sync.sync(media, push_through=push_through, expected_revision=revision):
                     mal_id = media.get('idMal') or anilist.mal_id(media['id'])
                     status = myanimelist.get_list_status(mal_id)
                     GLib.idle_add(self._mal_sync_finished, media.get('id'), generation,
@@ -200,6 +207,131 @@ class MalUI:
                 GLib.idle_add(self._mal_sync_finished, media.get('id'), generation,
                               credentials['username'], None, True)
         threading.Thread(target=worker, daemon=True).start()
+
+    def toggle_mal_tracking(self, *_args):
+        media = self.current_anime or {}
+        anime_id = media.get('id')
+        try:
+            if mal_sync.set_tracked(anime_id, not mal_sync.is_tracked(anime_id)):
+                self.queue_mal_sync(media)
+        except OSError:
+            self.show_notice(tr('Não foi possível salvar o acompanhamento do MyAnimeList.'))
+
+    def open_mal_editor(self, *_args):
+        media = dict(self.current_anime or {})
+        if not mal_sync.is_tracked(media.get('id')):
+            return
+        self.mal_edit_button.set_sensitive(False)
+        self.anime_mal_status.set_text(tr('Consultando MyAnimeList…'))
+
+        def worker():
+            try:
+                mal_id = media.get('idMal') or anilist.mal_id(media['id'])
+                if not mal_id:
+                    raise ValueError('Missing MAL ID')
+                status = myanimelist.get_list_status(mal_id)
+                GLib.idle_add(self._show_mal_editor, media, mal_id, status, False)
+            except Exception:
+                GLib.idle_add(self._show_mal_editor, media, None, None, True)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_mal_editor(self, media, mal_id, status, error):
+        if (self.current_anime or {}).get('id') != media.get('id') or not mal_sync.is_tracked(media.get('id')):
+            return False
+        self.mal_edit_button.set_sensitive(True)
+        if error:
+            self.anime_mal_status.set_text(tr('Não foi possível consultar o MyAnimeList.'))
+            return False
+        new_entry = not status
+        status = status or {}
+        username = settings.mal_credentials()['username']
+        window = Gtk.Window(title=tr('Editar MyAnimeList'), transient_for=self.window, modal=True)
+        window.set_default_size(420, 400)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_top(20)
+        box.set_margin_bottom(20)
+        box.set_margin_start(20)
+        box.set_margin_end(20)
+        window.set_child(box)
+        states = ['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch']
+        names = [tr('Assistindo'), tr('Concluído'), tr('Em espera'), tr('Abandonado'), tr('Planejo assistir')]
+        box.append(Gtk.Label(label=tr('Situação'), xalign=0))
+        state = Gtk.DropDown(model=Gtk.StringList.new(names))
+        state.set_selected(states.index(status['status']) if status.get('status') in states else 4)
+        box.append(state)
+        box.append(Gtk.Label(label=tr('Episódios assistidos'), xalign=0))
+        count = Gtk.SpinButton.new_with_range(0, 999999, 1)
+        count.set_value(int(status.get('num_episodes_watched') or 0))
+        box.append(count)
+        box.append(Gtk.Label(label=tr('Nota (0 para não avaliado)'), xalign=0))
+        score = Gtk.SpinButton.new_with_range(0, 10, 1)
+        score.set_value(int(status.get('score') or 0))
+        box.append(score)
+        rewatch_row = Gtk.Box(spacing=8)
+        rewatch_label = Gtk.Label(label=tr('Reassistindo'), xalign=0, hexpand=True)
+        rewatch_row.append(rewatch_label)
+        rewatch = Gtk.Switch(active=bool(status.get('is_rewatching')))
+        rewatch_row.append(rewatch)
+        box.append(rewatch_row)
+        box.append(Gtk.Label(label=tr('Vezes que reassistiu') if 'num_times_rewatched' in status else
+                             tr('Vezes que reassistiu (valor não informado pelo MyAnimeList)'), xalign=0, wrap=True))
+        rewatch_count = Gtk.SpinButton.new_with_range(0, 9999, 1)
+        rewatch_count.set_value(int(status.get('num_times_rewatched') or 0))
+        box.append(rewatch_count)
+        rewatch_count_changed = [False]
+        rewatch_count.connect('value-changed', lambda *_: rewatch_count_changed.__setitem__(0, True))
+        initial = (state.get_selected(), count.get_value_as_int(), score.get_value_as_int(),
+                   rewatch.get_active(), rewatch_count.get_value_as_int())
+        feedback = Gtk.Label(label='', wrap=True, xalign=0)
+        box.append(feedback)
+        save = Gtk.Button(label=tr('Salvar no MyAnimeList'))
+        save.add_css_class('suggested-action')
+        box.append(save)
+
+        def save_clicked(_button):
+            if not mal_sync.is_tracked(media['id']):
+                feedback.set_text(tr('Este anime não está vinculado.'))
+                return
+            current = (state.get_selected(), count.get_value_as_int(), score.get_value_as_int(),
+                       rewatch.get_active(), rewatch_count.get_value_as_int())
+            changes = {}
+            if new_entry or current[0] != initial[0]:
+                changes['status'] = states[current[0]]
+            if current[1] != initial[1]:
+                changes['num_watched_episodes'] = current[1]
+            if current[2] != initial[2]:
+                changes['score'] = current[2]
+            if current[3] != initial[3]:
+                changes['is_rewatching'] = 'true' if current[3] else 'false'
+            if rewatch_count_changed[0]:
+                changes['num_times_rewatched'] = current[4]
+            if not changes:
+                window.close()
+                return
+            save.set_sensitive(False)
+            feedback.set_text(tr('Salvando…'))
+            mal_sync.reserve_manual_edit(media['id'], username)
+            def worker():
+                try:
+                    mal_sync.save_manual(media['id'], mal_id, username, changes)
+                    GLib.idle_add(done, None)
+                except Exception:
+                    GLib.idle_add(done, True)
+            threading.Thread(target=worker, daemon=True).start()
+
+        def done(error):
+            if error:
+                save.set_sensitive(True)
+                feedback.set_text(tr('Não foi possível salvar no MyAnimeList.'))
+            else:
+                window.close()
+                if (self.current_anime or {}).get('id') == media['id']:
+                    self.queue_mal_sync(media)
+            return False
+
+        save.connect('clicked', save_clicked)
+        window.present()
+        return False
 
     def _mal_sync_finished(self, anime_id, generation, username, status, error):
         credentials = settings.mal_credentials()

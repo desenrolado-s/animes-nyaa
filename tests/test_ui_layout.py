@@ -2,6 +2,7 @@
 import unittest
 import tempfile
 import socket
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,7 +10,7 @@ try:
     import gi
     gi.require_version('Adw', '1')
     gi.require_version('Gtk', '4.0')
-    from gi.repository import Adw, Gdk, Gtk
+    from gi.repository import Adw, Gdk, GLib, Gtk
     HAS_GTK = bool(Gtk.init_check()) and Gdk.Display.get_default() is not None
     if HAS_GTK:
         Adw.init()
@@ -91,6 +92,50 @@ class DetailLayoutTests(unittest.TestCase):
             settings.set_mal_credentials(refresh_token='')
             self.app.queue_mal_sync(self.app.current_anime)
             self.assertEqual(self.app.anime_mal_status.get_text(), tr('Conecte sua conta nas configurações.'))
+
+    def test_opening_untracked_anime_never_starts_mal_sync(self):
+        from anime.storage import settings
+        from anime.ui.i18n import tr
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.ui.mal_ui.mal_sync.sync') as sync:
+            settings.set_mal_credentials(username='alice', refresh_token='token')
+            self.app.queue_mal_sync(self.app.current_anime)
+            sync.assert_not_called()
+            self.assertEqual(self.app.anime_mal_status.get_text(), tr('Este anime não está vinculado.'))
+            self.assertFalse(self.app.mal_edit_button.get_sensitive())
+
+    def test_mal_editor_only_saves_fields_user_changed(self):
+        from anime.services import mal_sync
+        from anime.storage import settings
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.services.myanimelist.update_list_status') as update, \
+             patch.object(self.app, 'queue_mal_sync'):
+            settings.set_mal_credentials(username='alice', refresh_token='token')
+            mal_sync.set_tracked(100, True)
+            self.app._show_mal_editor(self.app.current_anime, 20,
+                                      {'status': 'watching', 'num_episodes_watched': 300,
+                                       'score': 7, 'is_rewatching': False}, False)
+            windows = Gtk.Window.get_toplevels()
+            window = next(windows.get_item(i) for i in range(windows.get_n_items())
+                          if windows.get_item(i).get_transient_for() == self.app.window)
+            box = window.get_child()
+            widgets = []
+            child = box.get_first_child()
+            while child:
+                widgets.append(child)
+                child = child.get_next_sibling()
+            spins = [child for child in widgets if isinstance(child, Gtk.SpinButton)]
+            spins[0].set_value(301)
+            switch = next(child.get_last_child() for child in widgets
+                          if isinstance(child, Gtk.Box) and isinstance(child.get_last_child(), Gtk.Switch))
+            switch.set_active(True)
+            next(child for child in widgets if isinstance(child, Gtk.Button)).emit('clicked')
+            deadline = time.monotonic() + 2
+            while not update.called and time.monotonic() < deadline:
+                GLib.MainContext.default().iteration(False)
+                time.sleep(0.01)
+            update.assert_called_once_with(20, {'num_watched_episodes': 301, 'is_rewatching': 'true'})
+            window.close()
 
     def test_episode_search_keeps_overview_visible(self):
         with patch.object(self.app, 'search_releases'):

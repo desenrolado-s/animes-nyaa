@@ -118,3 +118,8 @@ def get_progress(mal_id):
 def set_progress(mal_id, count):
     return _request(f'{API_URL}/anime/{int(mal_id)}/my_list_status',
                     {'num_watched_episodes': max(0, int(count))}, method='PATCH', token=access_token())
+
+
+def update_list_status(mal_id, changes):
+    return _request(f'{API_URL}/anime/{int(mal_id)}/my_list_status', changes,
+                    method='PATCH', token=access_token())

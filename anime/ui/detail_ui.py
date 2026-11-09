@@ -254,6 +254,12 @@ class DetailUI:
         self.anime_mal_status = self.label('', 'dim-label')
         self.anime_mal_status.set_wrap(True)
         self.anime_info.append(self.anime_mal_status)
+        self.mal_track_button = Gtk.Button()
+        self.mal_track_button.connect('clicked', self.toggle_mal_tracking)
+        self.anime_info.append(self.mal_track_button)
+        self.mal_edit_button = Gtk.Button(label=tr('Editar MyAnimeList'))
+        self.mal_edit_button.connect('clicked', self.open_mal_editor)
+        self.anime_info.append(self.mal_edit_button)
 
         summary_heading = self.label('SINOPSE', 'caption-heading')
         self.anime_info.append(summary_heading)
@@ -549,7 +555,8 @@ class DetailUI:
         anime_id = (self.current_anime or {}).get('id')
         if mal_sync.change(anime_id, numbers, watched):
             self.refresh_watched_episodes()
-            self.queue_mal_sync(self.current_anime)
+            if watched:
+                self.queue_mal_sync(self.current_anime, push_through=max(numbers))
         popover.popdown()
 
     def refresh_watched_episodes(self):

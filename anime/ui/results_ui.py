@@ -574,7 +574,7 @@ class ResultsUI:
         anime_id = (anime or {}).get('id') or item.get('anilist_id')
         try:
             if mal_sync.change(anime_id, [episode_number], True):
-                self.queue_mal_sync(anime or {'id': anime_id})
+                self.queue_mal_sync(anime or {'id': anime_id}, push_through=episode_number)
         except Exception as exc:
             self.show_notice(tr(f'A reprodução iniciou, mas não foi possível salvar o progresso: {exc}'))
         try:
