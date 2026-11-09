@@ -40,6 +40,18 @@ class DetailLayoutTests(unittest.TestCase):
         self.assertEqual(self.app.anime_tabs.get_visible_child_name(), 'episodes')
         self.assertEqual(self.app.episode_tab_stack.get_visible_child_name(), 'episodes')
 
+    def test_myanimelist_settings_start_authorization(self):
+        from anime.storage import settings
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.ui.mal_ui.webbrowser.open', return_value=True) as browser:
+            self.app.show_settings()
+            self.app.mal_client_entry.set_text('client-id')
+            self.app.mal_redirect_entry.set_text('http://localhost:8765/callback')
+            self.app.start_mal_authorization()
+            self.assertIn('client_id=client-id', browser.call_args.args[0])
+            self.assertEqual(settings.mal_credentials()['access_token'], '')
+            self.app.settings_window.close()
+
     def test_episode_search_keeps_overview_visible(self):
         with patch.object(self.app, 'search_releases'):
             self.app.search_episode(1)

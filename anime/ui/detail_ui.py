@@ -11,7 +11,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Pango', '1.0')
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
-from ..services import anilist, episode_titles
+from ..services import anilist, episode_titles, mal_sync
 from ..storage import library, watch_progress
 from .common import IMAGE_POOL
 from .i18n import tr
@@ -339,6 +339,7 @@ class DetailUI:
         self.populate_episodes(count)
         self.refresh_watched_episodes()
         self.fetch_episode_titles(media)
+        self.queue_mal_sync(self.current_anime)
         self.stack.set_visible_child_name('anime')
         self.show_notice(tr(f'{count} episódios no catálogo.') if count else
                     tr('AniList não informa o total de episódios; você ainda pode buscar batches.'))
@@ -540,8 +541,9 @@ class DetailUI:
 
     def _change_episode_progress(self, _button, popover, numbers, watched):
         anime_id = (self.current_anime or {}).get('id')
-        if watch_progress.set_watched(anime_id, numbers, watched):
+        if mal_sync.change(anime_id, numbers, watched):
             self.refresh_watched_episodes()
+            self.queue_mal_sync(self.current_anime)
         popover.popdown()
 
     def refresh_watched_episodes(self):
