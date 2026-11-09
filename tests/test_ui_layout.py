@@ -1,5 +1,7 @@
 """Unit tests for anime detail layout persistence and tab navigation."""
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 try:
@@ -45,6 +47,49 @@ class DetailLayoutTests(unittest.TestCase):
         self.assertEqual(self.app.anime_tabs.get_visible_child_name(), 'episodes')
         self.assertEqual(self.app.episode_tab_stack.get_visible_child_name(), 'results')
         self.assertIsNotNone(self.app.anime_paned.get_start_child())
+
+    def test_episode_context_menu_updates_both_lists_with_filter(self):
+        from anime.storage import watch_progress
+        from anime.ui.i18n import tr
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)):
+            self.app.populate_episodes(12)
+            files = [{'name': f'Show - {n:02}.mkv', 'size': '1 GB', 'index': n}
+                     for n in range(1, 5)]
+            self.app.finish_batch_episodes(files, None, {'title': 'Batch'})
+            self.app.episode_search.set_text('04')
+            self.app.filter_episodes()
+            row = self.app.episode_rows[0][1]
+            gesture = next(c for c in row.observe_controllers() if isinstance(c, Gtk.GestureClick) and c.get_button() == 3)
+            gesture.emit('pressed', 1, 10.0, 10.0)
+            child = row.get_first_child()
+            while child and not isinstance(child, Gtk.Popover):
+                child = child.get_next_sibling()
+            self.assertIsNotNone(child)
+            box = child.get_child()
+            box.get_first_child().get_next_sibling().emit('clicked')
+            self.assertEqual(watch_progress.watched_episodes(100), {1, 2, 3})
+            self.assertTrue(self.app.batch_watched_badges[2][0].get_visible())
+            self.assertFalse(self.app.episode_watched_badges[4].get_visible())
+            gesture.emit('pressed', 1, 10.0, 10.0)
+            child = row.get_first_child()
+            while child and not isinstance(child, Gtk.Popover):
+                child = child.get_next_sibling()
+            child.get_child().get_first_child().emit('clicked')
+            self.assertEqual(watch_progress.watched_episodes(100), {1, 2, 3, 4})
+            self.assertTrue(self.app.batch_watched_badges[4][0].get_visible())
+            self.app.batch_episode_search.set_text('04')
+            self.app.filter_batch_episodes()
+            batch_row = self.app.batch_episode_rows[0][2]
+            batch_gesture = next(c for c in batch_row.observe_controllers()
+                                 if isinstance(c, Gtk.GestureClick) and c.get_button() == 3)
+            batch_gesture.emit('pressed', 1, 10.0, 10.0)
+            menu = batch_row.get_first_child()
+            while menu and not isinstance(menu, Gtk.Popover):
+                menu = menu.get_next_sibling()
+            self.assertIsNotNone(menu)
+            self.assertEqual(menu.get_child().get_first_child().get_label(), tr('Marcar como não assistido'))
+            menu.get_child().get_last_child().emit('clicked')
+            self.assertEqual(watch_progress.watched_episodes(100), {4})
 
     def test_returning_from_results_restores_episode_list(self):
         with patch.object(self.app, 'search_releases'):

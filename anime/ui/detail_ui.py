@@ -499,11 +499,50 @@ class DetailUI:
             row.add_suffix(watched_badge)
             row.set_activatable(True)
             row.connect('activated', lambda *_args, episode=number: self.search_episode(episode))
+            self.add_episode_context_menu(row, number, lambda episode=number: range(1, episode))
             self.episode_list.append(row)
             self.episode_rows.append((number, row))
             self.episode_watched_badges[number] = watched_badge
         self.episode_rendered_count = end
         return False
+
+    def add_episode_context_menu(self, row, number, above_numbers):
+        gesture = Gtk.GestureClick.new()
+        gesture.set_button(3)
+        gesture.connect('pressed', self._show_episode_context_menu, row, number, above_numbers)
+        row.add_controller(gesture)
+
+    def _show_episode_context_menu(self, gesture, _presses, x, y, row, number, above_numbers):
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        popover = Gtk.Popover()
+        popover.set_parent(row)
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        popover.set_pointing_to(rect)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        popover.set_child(box)
+        is_watched = number in getattr(self, 'watched_episodes', set())
+        above = list(above_numbers())
+        actions = [
+            (tr('Marcar como não assistido') if is_watched else tr('Marcar como assistido'),
+             [number], not is_watched),
+            (tr('Marcar todos acima como assistidos'), above, True),
+            (tr('Marcar todos acima como não assistidos'), above, False),
+        ]
+        for label, numbers, watched in actions:
+            button = Gtk.Button(label=label)
+            button.add_css_class('flat')
+            button.set_sensitive(bool(numbers))
+            button.connect('clicked', self._change_episode_progress, popover, numbers, watched)
+            box.append(button)
+        popover.connect('closed', lambda menu: menu.unparent())
+        popover.popup()
+
+    def _change_episode_progress(self, _button, popover, numbers, watched):
+        anime_id = (self.current_anime or {}).get('id')
+        if watch_progress.set_watched(anime_id, numbers, watched):
+            self.refresh_watched_episodes()
+        popover.popdown()
 
     def refresh_watched_episodes(self):
         anime_id = (self.current_anime or {}).get('id')
