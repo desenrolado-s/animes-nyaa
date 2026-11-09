@@ -120,6 +120,16 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(entry['episode_number'], 4)
         self.assertEqual(entry['anilist_id'], 12)
 
+    def test_bulk_watch_updates_preserve_other_episodes_and_anime(self):
+        watch_progress.mark_watched(12, 8)
+        watch_progress.mark_watched(13, 2)
+        self.assertTrue(watch_progress.set_watched(12, [1, 2, 3], True))
+        self.assertTrue(watch_progress.set_watched(12, [2, 3], False))
+        self.assertEqual(watch_progress.watched_episodes(12), {1, 8})
+        self.assertEqual(watch_progress.watched_episodes(13), {2})
+        self.assertFalse(watch_progress.set_watched(None, [1], True))
+        self.assertFalse(watch_progress.set_watched(12, [0, -1, True], True))
+
     def test_lastfm_progress_claim_can_retry_until_submitted(self):
         self.assertTrue(lastfm_progress.claim(12, 4))
         self.assertFalse(lastfm_progress.claim(12, 4))
