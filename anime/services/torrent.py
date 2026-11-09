@@ -1,7 +1,9 @@
 """Torrent metadata helpers used to browse the episodes inside batch releases."""
+from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 VIDEO_EXTENSIONS = {
@@ -11,16 +13,57 @@ VIDEO_EXTENSIONS = {
 _ANSI_ESCAPE = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
 
 
+def resolve_webtorrent_cli_script(executable=None):
+    """Resolve the underlying webtorrent-cli JavaScript entry point when available."""
+    bundle = getattr(sys, '_MEIPASS', None)
+    if bundle:
+        bundled = Path(bundle) / 'webtorrent-cli' / 'node_modules' / 'webtorrent-cli' / 'bin' / 'cmd.js'
+        if bundled.is_file():
+            return str(bundled)
+    if executable:
+        try:
+            resolved = Path(executable).resolve()
+        except OSError:
+            resolved = Path(executable)
+        if resolved.suffix.lower() in ('.js', '.mjs', '.cjs') and resolved.is_file():
+            return str(resolved)
+        candidates = (
+            resolved.parent.parent / 'webtorrent-cli' / 'bin' / 'cmd.js',
+            resolved.parent / 'node_modules' / 'webtorrent-cli' / 'bin' / 'cmd.js',
+        )
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 def list_video_files(magnet, timeout=120):
     executable = shutil.which('webtorrent')
-    if not executable:
+    script = resolve_webtorrent_cli_script(executable)
+    use_node_script = bool(
+        script and (
+            not executable
+            or sys.platform == 'win32'
+            or executable.lower().endswith(('.cmd', '.bat', '.ps1'))
+        )
+    )
+    node = shutil.which('node') if use_node_script else None
+    if node and script:
+        command = [node, script, magnet, '--select', 'list', '--quiet', '--port', '0']
+    elif executable:
+        command = [executable, magnet, '--select', 'list', '--quiet', '--port', '0']
+    else:
         raise RuntimeError('Instale webtorrent-cli para ver os episódios deste batch.')
+    run_kwargs = {}
+    if sys.platform == 'win32':
+        run_kwargs['creationflags'] = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     with tempfile.TemporaryDirectory(prefix='anime-nyaa-list-') as temp_dir:
         try:
             result = subprocess.run(
-                [executable, magnet, '--select', 'list', '--quiet', '--port', '0'],
-                capture_output=True, text=True, timeout=timeout, check=False,
-                cwd=temp_dir,
+                command,
+                capture_output=True, text=True, encoding='utf-8', errors='replace',
+                timeout=timeout, check=False, cwd=temp_dir,
+                **run_kwargs,
             )
         except subprocess.TimeoutExpired as error:
             raise RuntimeError('O Nyaa demorou para entregar os dados do torrent. Tente novamente.') from error

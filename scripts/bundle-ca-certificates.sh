@@ -8,7 +8,9 @@ fi
 for certificate_file in \
   /etc/ssl/certs/ca-certificates.crt \
   /etc/pki/tls/certs/ca-bundle.crt \
-  /etc/ssl/ca-bundle.pem; do
+  /etc/ssl/ca-bundle.pem \
+  "${MINGW_PREFIX:-/ucrt64}/etc/ssl/certs/ca-bundle.crt" \
+  /usr/ssl/certs/ca-bundle.crt; do
   if [ -r "$certificate_file" ]; then
     mkdir -p "$destination"
     cp -L "$certificate_file" "$destination/ca-certificates.crt"

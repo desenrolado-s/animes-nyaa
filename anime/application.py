@@ -1,6 +1,7 @@
 """GTK application shell and composition of the UI components."""
 import os
 import signal
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -71,7 +72,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
             'io.github.desenrolado_s.AnimeNyaa',
         )
         missing = []
-        bundled_root = os.path.realpath(icon_directory) + os.sep
+        bundled_root = os.path.normcase(os.path.realpath(icon_directory)) + os.sep
         theme.set_search_path([icon_directory])
         theme.set_theme_name('anime-nyaa-smoke-missing-theme')
         for icon_name in icon_names:
@@ -80,7 +81,8 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
                 Gtk.IconLookupFlags.FORCE_REGULAR,
             )
             icon_file = paintable.get_file()
-            icon_path = os.path.realpath(icon_file.get_path()) if icon_file else ''
+            raw_path = icon_file.get_path() if icon_file else None
+            icon_path = os.path.normcase(os.path.realpath(raw_path)) if raw_path else ''
             if not icon_path.startswith(bundled_root):
                 missing.append(icon_name)
         return ', '.join(missing) if missing else None
@@ -322,13 +324,28 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
             self.cancelled_playback_sessions.add(session_id)
         self.playback_process = None
         if proc:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except OSError:
+            if sys.platform == 'win32':
                 try:
-                    proc.terminate()
+                    subprocess.run(
+                        ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                    )
                 except OSError:
-                    pass
+                    try:
+                        proc.terminate()
+                    except OSError:
+                        pass
+            else:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except OSError:
+                    try:
+                        proc.terminate()
+                    except OSError:
+                        pass
         self.dismiss_playback_status()
         self.show_notice('Reprodução cancelada.')
 
@@ -358,7 +375,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, valign=Gtk.Align.CENTER)
         choose = Gtk.Button(label=tr('Escolher pasta'))
         choose.connect('clicked', lambda *_: self.choose_temporary_directory(window, row))
-        reset = Gtk.Button(label=tr('Usar /tmp'))
+        reset = Gtk.Button(label=tr('Usar padrão') if sys.platform == 'win32' else tr('Usar /tmp'))
         reset.connect('clicked', lambda *_: self.reset_temporary_directory(row))
         actions.append(choose)
         actions.append(reset)
@@ -631,6 +648,7 @@ def main(argv=None):
     app = AnimeApp(smoke='--smoke-test' in argv)
     status = app.run([argv[0]])
     if app.smoke_error:
-        print(f'Bundled GTK icon smoke test failed: {app.smoke_error}', file=sys.stderr)
+        if sys.stderr is not None:
+            print(f'Bundled GTK icon smoke test failed: {app.smoke_error}', file=sys.stderr)
         return 1
     return status

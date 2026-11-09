@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createRequire } from 'node:module'
-import { realpathSync, unlinkSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, realpathSync, unlinkSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { createConnection } from 'node:net'
@@ -16,18 +16,44 @@ if (!cliPath || !magnet || !Number.isInteger(index) || index < -1 || !outputPath
   process.exit(2)
 }
 
+const isWindows = process.platform === 'win32'
+
 // Em Linux, caminhos de Unix domain sockets têm limite estrito de 108 bytes (sun_path).
-// Usar tmpdir() com um token aleatório por sessão garante tamanho curto (<35 bytes),
-// unicidade por execução e previne conflitos caso um PID antigo seja reutilizado.
+// No Windows, o mpv requer Named Pipes (\\.\pipe\...) para --input-ipc-server.
 const sessionToken = randomBytes(4).toString('hex')
-const ipcSocketPath = join(tmpdir(), `nyaa-mpv-${process.pid}-${sessionToken}.sock`)
-try { unlinkSync(ipcSocketPath) } catch {}
+const ipcSocketPath = isWindows
+  ? `\\\\.\\pipe\\nyaa-mpv-${process.pid}-${sessionToken}`
+  : join(tmpdir(), `nyaa-mpv-${process.pid}-${sessionToken}.sock`)
+
+function cleanupIpcSocket() {
+  if (!isWindows) {
+    try { unlinkSync(ipcSocketPath) } catch {}
+  }
+}
+
+function resolveCliEntry(inputPath) {
+  const resolved = realpathSync(inputPath)
+  const normalized = resolved.replace(/\\/g, '/')
+  if (/\.(cmd|bat|ps1)$/i.test(resolved) || normalized.endsWith('/.bin/webtorrent')) {
+    const dir = dirname(resolved)
+    const candidates = [
+      join(dir, '..', 'webtorrent-cli', 'bin', 'cmd.js'),
+      join(dir, 'node_modules', 'webtorrent-cli', 'bin', 'cmd.js'),
+    ]
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return realpathSync(candidate)
+    }
+  }
+  return resolved
+}
+
+cleanupIpcSocket()
 try {
   const { writeFileSync } = await import('node:fs')
   writeFileSync(join(outputPath, 'session.pid'), String(process.pid))
 } catch {}
 
-const requireFromCli = createRequire(realpathSync(cliPath))
+const requireFromCli = createRequire(resolveCliEntry(cliPath))
 const webtorrentModule = requireFromCli.resolve('webtorrent')
 const { default: WebTorrent } = await import(pathToFileURL(webtorrentModule).href)
 const client = new WebTorrent({ torrentPort: 0, dhtPort: 0 })
@@ -72,14 +98,19 @@ async function cleanupStorage() {
   }
 }
 
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+const signals = isWindows ? ['SIGINT', 'SIGTERM', 'SIGBREAK'] : ['SIGINT', 'SIGTERM', 'SIGHUP']
+for (const signal of signals) {
   process.once(signal, async () => {
     if (pollInterval) clearInterval(pollInterval)
     if (ipcSocket && !ipcSocket.destroyed) {
       ipcSocket.destroy()
     }
     if (player && player.exitCode === null && player.signalCode === null) {
-      player.kill('SIGTERM')
+      if (isWindows) {
+        player.kill()
+      } else {
+        player.kill('SIGTERM')
+      }
       await new Promise(resolve => {
         player.once('exit', resolve)
         setTimeout(resolve, 1500)
@@ -87,7 +118,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     }
     try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
     try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
-    try { unlinkSync(ipcSocketPath) } catch {}
+    cleanupIpcSocket()
     await cleanupStorage()
     process.exit(1)
   })
@@ -113,7 +144,7 @@ try {
 
   const url = `http://127.0.0.1:${server.address().port}${file.streamURL}`
 
-  try { unlinkSync(ipcSocketPath) } catch {}
+  cleanupIpcSocket()
   console.log('STATUS: Abrindo o reprodutor mpv…')
   player = spawn(mpvPath, [
     '--really-quiet',
@@ -213,7 +244,11 @@ try {
     ipcSocket.destroy()
   }
   if (player && player.exitCode === null && player.signalCode === null) {
-    player.kill('SIGTERM')
+    if (isWindows) {
+      player.kill()
+    } else {
+      player.kill('SIGTERM')
+    }
     await new Promise(resolve => {
       player.once('exit', resolve)
       setTimeout(resolve, 1500)
@@ -221,7 +256,7 @@ try {
   }
   try { await new Promise(resolve => client.destroy(() => resolve())) } catch {}
   try { await new Promise(resolve => streamServer.close(resolve)) } catch {}
-  try { unlinkSync(ipcSocketPath) } catch {}
+  cleanupIpcSocket()
   await cleanupStorage()
 }
 

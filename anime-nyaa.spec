@@ -1,4 +1,6 @@
-# PyInstaller spec for the host GTK/Libadwaita runtime bundle.
+# PyInstaller spec for the GTK/Libadwaita runtime bundle.
+import sys
+
 a = Analysis(
     ['anime_app.py'],
     pathex=[],
@@ -26,6 +28,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='anime-nyaa',
+    icon='packaging/windows/anime-nyaa.ico' if sys.platform == 'win32' else None,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

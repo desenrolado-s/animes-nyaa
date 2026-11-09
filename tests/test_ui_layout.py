@@ -22,6 +22,8 @@ except (ImportError, ValueError, RuntimeError):
 @unittest.skipUnless(HAS_GTK, "GTK display is not available in headless offline test environment")
 class DetailLayoutTests(unittest.TestCase):
     def setUp(self):
+        self.lang_patcher = patch('anime.storage.settings.language', return_value='pt')
+        self.lang_patcher.start()
         self.app = AnimeApp(smoke=True)
         self.app.do_activate()
         self.sample_anime = {
@@ -35,6 +37,9 @@ class DetailLayoutTests(unittest.TestCase):
             'description': 'Asta and Yuno are orphans.',
         }
         self.app.open_anime(self.sample_anime)
+
+    def tearDown(self):
+        self.lang_patcher.stop()
 
     def test_anime_overview_is_persistent_in_paned_start_child(self):
         self.assertIsNotNone(self.app.anime_paned.get_start_child())

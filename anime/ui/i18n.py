@@ -124,7 +124,7 @@ _PT_TO_EN = {
     'Selecionar': 'Select', 'Cancelar': 'Cancel',
     'English': 'English', 'Português': 'Portuguese',
     'Escolha onde o WebTorrent armazena os dados enquanto reproduz vídeos.': 'Choose where WebTorrent stores data while playing videos.',
-    'Pasta dos vídeos temporários': 'Temporary video folder', 'Escolher pasta': 'Choose folder', 'Usar /tmp': 'Use /tmp',
+    'Pasta dos vídeos temporários': 'Temporary video folder', 'Escolher pasta': 'Choose folder', 'Usar /tmp': 'Use /tmp', 'Usar padrão': 'Use default',
     'Envie a abertura e o encerramento de cada episódio na primeira reprodução.': 'Scrobble each episode’s opening and ending themes on first playback.',
     'Chave de API do Last.fm': 'Last.fm API key', 'Chave de API': 'API key', 'Segredo da API': 'API secret',
     'Enviar temas ao Last.fm': 'Scrobble themes to Last.fm', 'Cada episódio é enviado uma única vez.': 'Each episode is scrobbled only once.',
