@@ -1,12 +1,16 @@
 """Offline tests for MyAnimeList authentication and progress reconciliation."""
 import json
+import socket
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
-from anime.services import mal_sync, myanimelist
+from anime.services import mal_callback, mal_sync, myanimelist
 from anime.storage import settings, watch_progress
 
 
@@ -34,6 +38,29 @@ class MalTests(unittest.TestCase):
             myanimelist.callback_code(f'{redirect}?code=abc&state=wrong', redirect, state)
         with self.assertRaises(ValueError):
             myanimelist.callback_code(f'http://evil.test/callback?code=abc&state={state}', redirect, state)
+
+    def test_loopback_callback_rejects_invalid_state_and_accepts_valid_code(self):
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        redirect = f'http://127.0.0.1:{port}/callback'
+        received = []
+        done = threading.Event()
+        listener = mal_callback.CallbackListener(
+            redirect, 'expected', lambda code: (received.append(code), done.set()), 'Received', 'Invalid')
+        self.addCleanup(listener.close)
+        with self.assertRaises(HTTPError) as invalid:
+            urlopen(redirect + '?code=bad&state=wrong', timeout=2)
+        self.assertEqual(invalid.exception.code, 400)
+        self.assertEqual(received, [])
+        with urlopen(redirect + '?code=good&state=expected', timeout=2) as response:
+            self.assertIn(b'Received', response.read())
+        self.assertTrue(done.wait(2))
+        self.assertEqual(received, ['good'])
+
+    def test_callback_listener_rejects_non_loopback_addresses(self):
+        with self.assertRaises(ValueError):
+            mal_callback.CallbackListener('http://example.com:8765/callback', 's', lambda _: None, 'ok', 'error')
 
     def test_expired_token_refreshes_and_preserves_credentials(self):
         self.connect()

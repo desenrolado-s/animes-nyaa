@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from gi.repository import Adw, GLib, Gtk
 
-from ..services import anilist, mal_sync, myanimelist
+from ..services import anilist, mal_callback, mal_sync, myanimelist
 from ..storage import settings
 from .i18n import tr
 
@@ -46,7 +46,7 @@ class MalUI:
         row.add_suffix(disconnect)
         group.add(row)
         row = Adw.ActionRow(title=tr('URL após autorização'),
-                            subtitle=tr('Copie a URL completa da página aberta após autorizar, mesmo se ela não carregar.'))
+                            subtitle=tr('Se a conexão automática falhar, cole a URL completa de retorno.'))
         self.mal_callback_entry = Gtk.Entry(hexpand=True)
         row.add_suffix(self.mal_callback_entry)
         finish = Gtk.Button(label=tr('Concluir conexão'))
@@ -71,16 +71,34 @@ class MalUI:
             self.mal_status.set_text(tr('Informe o ID do cliente e uma URL de redirecionamento válida.'))
             return
         url, verifier, state = myanimelist.new_authorization(client_id, redirect_uri)
+        self._stop_mal_listener()
         self._mal_authorization = (client_id, redirect_uri, verifier, state, client_secret)
+        pending = self._mal_authorization
         self.mal_callback_entry.set_text('')
+        try:
+            self._mal_listener = mal_callback.CallbackListener(
+                redirect_uri, state,
+                lambda code: GLib.idle_add(self._mal_received_code, pending, code),
+                tr('Autorização recebida. Volte ao aplicativo para concluir a conexão.'),
+                tr('Retorno inválido. Volte ao aplicativo e tente novamente.'))
+        except OSError:
+            self._mal_authorization = None
+            self._mal_listener = None
+            self.mal_status.set_text(tr('A porta de retorno está em uso. Feche o outro aplicativo ou escolha outra porta cadastrada no MyAnimeList.'))
+            return
+        except ValueError:
+            self._mal_listener = None
         try:
             opened = webbrowser.open(url)
         except Exception:
             opened = False
         if not opened:
+            self._stop_mal_listener()
             self.mal_status.set_text(tr('Não foi possível abrir o navegador.'))
             return
-        self.mal_status.set_text(tr('Autorize no navegador e cole a URL de retorno.'))
+        self.mal_status.set_text(tr('Autorize no navegador; a conexão será concluída automaticamente.')
+                                 if self._mal_listener else
+                                 tr('Autorize no navegador e cole a URL de retorno.'))
 
     def finish_mal_authorization(self, *_args):
         pending = getattr(self, '_mal_authorization', None)
@@ -93,6 +111,26 @@ class MalUI:
         except ValueError as error:
             self.mal_status.set_text(tr(str(error)))
             return
+        self._mal_received_code(pending, code)
+
+    def _stop_mal_listener(self):
+        listener = getattr(self, '_mal_listener', None)
+        self._mal_listener = None
+        if listener:
+            listener.close()
+
+    def cancel_mal_authorization(self, *_args):
+        self._mal_authorization = None
+        self._mal_exchange_pending = False
+        self._stop_mal_listener()
+        return False
+
+    def _mal_received_code(self, pending, code):
+        if pending != getattr(self, '_mal_authorization', None) or getattr(self, '_mal_exchange_pending', False):
+            return False
+        self._mal_exchange_pending = True
+        self._stop_mal_listener()
+        client_id, redirect_uri, verifier, state, client_secret = pending
         self.mal_auth_button.set_sensitive(False)
         self.mal_status.set_text(tr('Concluindo conexão…'))
 
@@ -106,11 +144,13 @@ class MalUI:
             except Exception as error:
                 GLib.idle_add(self._finish_mal_connection, pending, None, '', str(error))
         threading.Thread(target=worker, daemon=True).start()
+        return False
 
     def _finish_mal_connection(self, pending, tokens, username, error):
-        self.mal_auth_button.set_sensitive(True)
         if pending != getattr(self, '_mal_authorization', None):
             return False
+        self._mal_exchange_pending = False
+        self.mal_auth_button.set_sensitive(True)
         if error:
             self.mal_status.set_text(tr('Falha ao conectar ao MyAnimeList.'))
             return False
@@ -127,7 +167,7 @@ class MalUI:
         return False
 
     def disconnect_mal(self, *_args):
-        self._mal_authorization = None
+        self.cancel_mal_authorization()
         myanimelist.disconnect()
         self.mal_callback_entry.set_text('')
         self.mal_status.set_text(self.mal_status_text())

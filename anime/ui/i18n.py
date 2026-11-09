@@ -7,6 +7,11 @@ from ..storage import settings
 _PT_TO_EN = {
     'Sincronize o progresso sequencial ao abrir ou assistir um anime.': 'Sync sequential progress when opening or watching an anime.',
     'ID do cliente MyAnimeList': 'MyAnimeList client ID',
+    'Se a conexão automática falhar, cole a URL completa de retorno.': 'If automatic connection fails, paste the full return URL.',
+    'Autorização recebida. Volte ao aplicativo para concluir a conexão.': 'Authorization received. Return to the app to finish connecting.',
+    'Retorno inválido. Volte ao aplicativo e tente novamente.': 'Invalid response. Return to the app and try again.',
+    'Autorize no navegador; a conexão será concluída automaticamente.': 'Authorize in your browser; the connection will finish automatically.',
+    'A porta de retorno está em uso. Feche o outro aplicativo ou escolha outra porta cadastrada no MyAnimeList.': 'The callback port is in use. Close the other application or choose another port registered with MyAnimeList.',
     'Conecte sua conta nas configurações.': 'Connect your account in settings.',
     'Consultando MyAnimeList…': 'Checking MyAnimeList…',
     'Não foi possível consultar o MyAnimeList.': 'Could not retrieve MyAnimeList status.',

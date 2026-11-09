@@ -334,6 +334,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
 
     def show_settings(self):
         window = Adw.PreferencesWindow(transient_for=self.window, modal=True, title=tr('Configurações'))
+        window.connect('close-request', self.cancel_mal_authorization)
         window.set_default_size(700, 620)
         page = Adw.PreferencesPage(title=tr('Geral'), icon_name='preferences-system-symbolic')
         language_group = Adw.PreferencesGroup(title=tr('Idioma'))

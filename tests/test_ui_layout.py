@@ -1,6 +1,7 @@
 """Unit tests for anime detail layout persistence and tab navigation."""
 import unittest
 import tempfile
+import socket
 from pathlib import Path
 from unittest.mock import patch
 
@@ -46,10 +47,28 @@ class DetailLayoutTests(unittest.TestCase):
              patch('anime.ui.mal_ui.webbrowser.open', return_value=True) as browser:
             self.app.show_settings()
             self.app.mal_client_entry.set_text('client-id')
-            self.app.mal_redirect_entry.set_text('http://localhost:8765/callback')
+            with socket.socket() as sock:
+                sock.bind(('127.0.0.1', 0))
+                port = sock.getsockname()[1]
+            self.app.mal_redirect_entry.set_text(f'http://localhost:{port}/callback')
             self.app.start_mal_authorization()
             self.assertIn('client_id=client-id', browser.call_args.args[0])
             self.assertEqual(settings.mal_credentials()['access_token'], '')
+            self.app._stop_mal_listener()
+            self.app.settings_window.close()
+
+    def test_myanimelist_does_not_authorize_when_callback_port_is_taken(self):
+        from anime.ui.i18n import tr
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.ui.mal_ui.webbrowser.open') as browser, socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            sock.listen()
+            self.app.show_settings()
+            self.app.mal_client_entry.set_text('client-id')
+            self.app.mal_redirect_entry.set_text(f'http://localhost:{sock.getsockname()[1]}/callback')
+            self.app.start_mal_authorization()
+            browser.assert_not_called()
+            self.assertEqual(self.app.mal_status.get_text(), tr('A porta de retorno está em uso. Feche o outro aplicativo ou escolha outra porta cadastrada no MyAnimeList.'))
             self.app.settings_window.close()
 
     def test_myanimelist_anime_status_shows_progress_and_ignores_stale_results(self):
