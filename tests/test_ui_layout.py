@@ -52,6 +52,27 @@ class DetailLayoutTests(unittest.TestCase):
             self.assertEqual(settings.mal_credentials()['access_token'], '')
             self.app.settings_window.close()
 
+    def test_myanimelist_anime_status_shows_progress_and_ignores_stale_results(self):
+        from anime.storage import settings
+        from anime.ui.i18n import tr
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)):
+            settings.set_mal_credentials(username='alice', refresh_token='token')
+            self.app._mal_status_generation = 2
+            self.app._mal_sync_finished(100, 2, 'alice',
+                                        {'status': 'watching', 'num_episodes_watched': 4, 'score': 8}, None)
+            text = self.app.anime_mal_status.get_text()
+            self.assertIn(tr('Assistindo'), text)
+            self.assertIn('4', text)
+            self.assertIn('8/10', text)
+            self.app._mal_sync_finished(100, 1, 'alice', None, None)
+            self.assertEqual(self.app.anime_mal_status.get_text(), text)
+            self.app._mal_sync_finished(100, 2, 'alice', None, None)
+            self.assertEqual(self.app.anime_mal_status.get_text(),
+                             tr('Este anime ainda não está na sua lista do MyAnimeList.'))
+            settings.set_mal_credentials(refresh_token='')
+            self.app.queue_mal_sync(self.app.current_anime)
+            self.assertEqual(self.app.anime_mal_status.get_text(), tr('Conecte sua conta nas configurações.'))
+
     def test_episode_search_keeps_overview_visible(self):
         with patch.object(self.app, 'search_releases'):
             self.app.search_episode(1)

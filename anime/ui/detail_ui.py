@@ -249,6 +249,12 @@ class DetailUI:
         self.my_list_button = self.button('＋ Minha lista', self.toggle_current_anime_in_list)
         self.anime_info.append(self.my_list_button)
 
+        mal_heading = self.label('MyAnimeList', 'caption-heading')
+        self.anime_info.append(mal_heading)
+        self.anime_mal_status = self.label('', 'dim-label')
+        self.anime_mal_status.set_wrap(True)
+        self.anime_info.append(self.anime_mal_status)
+
         summary_heading = self.label('SINOPSE', 'caption-heading')
         self.anime_info.append(summary_heading)
         self.anime_summary = self.label('')

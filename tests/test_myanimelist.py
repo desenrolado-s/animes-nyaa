@@ -61,6 +61,16 @@ class MalTests(unittest.TestCase):
         self.assertEqual(request.call_args.kwargs['method'], 'PATCH')
         self.assertEqual(request.call_args.args[1], {'num_watched_episodes': 3})
 
+    def test_list_status_reads_authenticated_detail_and_handles_absence(self):
+        self.connect()
+        status = {'status': 'watching', 'num_episodes_watched': 3, 'score': 8}
+        with patch.object(myanimelist, '_request', return_value={'my_list_status': status}) as request:
+            self.assertEqual(myanimelist.get_list_status(15), status)
+            self.assertEqual(request.call_args.kwargs['token'], 'access')
+            self.assertIn('fields=my_list_status', request.call_args.args[0])
+        with patch.object(myanimelist, '_request', return_value={}):
+            self.assertIsNone(myanimelist.get_list_status(15))
+
     def test_disconnect_during_refresh_does_not_restore_session(self):
         self.connect()
         settings.set_mal_credentials(expires_at=0)

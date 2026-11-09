@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from gi.repository import Adw, GLib, Gtk
 
-from ..services import mal_sync, myanimelist
+from ..services import anilist, mal_sync, myanimelist
 from ..storage import settings
 from .i18n import tr
 
@@ -131,20 +131,60 @@ class MalUI:
         myanimelist.disconnect()
         self.mal_callback_entry.set_text('')
         self.mal_status.set_text(self.mal_status_text())
+        self._mal_status_generation = getattr(self, '_mal_status_generation', 0) + 1
+        if self.current_anime:
+            self.anime_mal_status.set_text(tr('Conecte sua conta nas configurações.'))
 
     def queue_mal_sync(self, media):
-        if not media or not settings.mal_credentials()['refresh_token']:
+        if not media:
             return
         media = dict(media)
+        credentials = settings.mal_credentials()
+        current = (self.current_anime or {}).get('id') == media.get('id')
+        generation = getattr(self, '_mal_status_generation', 0)
+        if current:
+            generation += 1
+            self._mal_status_generation = generation
+            self.anime_mal_status.set_text(tr('Consultando MyAnimeList…') if credentials['refresh_token']
+                                           else tr('Conecte sua conta nas configurações.'))
+        if not credentials['refresh_token']:
+            return
         def worker():
             try:
                 if mal_sync.sync(media):
-                    GLib.idle_add(self._mal_sync_finished, media.get('id'))
+                    mal_id = media.get('idMal') or anilist.mal_id(media['id'])
+                    status = myanimelist.get_list_status(mal_id)
+                    GLib.idle_add(self._mal_sync_finished, media.get('id'), generation,
+                                  credentials['username'], status, None)
             except Exception:
-                GLib.idle_add(self.show_notice, tr('Falha ao sincronizar com MyAnimeList. Tente novamente ao abrir o anime.'))
+                GLib.idle_add(self._mal_sync_finished, media.get('id'), generation,
+                              credentials['username'], None, True)
         threading.Thread(target=worker, daemon=True).start()
 
-    def _mal_sync_finished(self, anime_id):
-        if (self.current_anime or {}).get('id') == anime_id:
-            self.refresh_watched_episodes()
+    def _mal_sync_finished(self, anime_id, generation, username, status, error):
+        credentials = settings.mal_credentials()
+        if ((self.current_anime or {}).get('id') != anime_id or
+                generation != getattr(self, '_mal_status_generation', 0) or
+                not credentials['refresh_token'] or credentials['username'] != username):
+            return False
+        self.refresh_watched_episodes()
+        if error:
+            self.anime_mal_status.set_text(tr('Não foi possível consultar o MyAnimeList.'))
+            self.show_notice(tr('Falha ao sincronizar com MyAnimeList. Tente novamente ao abrir o anime.'))
+        else:
+            self.anime_mal_status.set_text(self.format_mal_anime_status(status))
         return False
+
+    @staticmethod
+    def format_mal_anime_status(status):
+        if not status:
+            return tr('Este anime ainda não está na sua lista do MyAnimeList.')
+        labels = {'watching': 'Assistindo', 'completed': 'Concluído', 'on_hold': 'Em espera',
+                  'dropped': 'Abandonado', 'plan_to_watch': 'Planejo assistir'}
+        state = tr(labels.get(status.get('status'), 'Status desconhecido'))
+        episodes = int(status.get('num_episodes_watched') or 0)
+        score = int(status.get('score') or 0)
+        result = tr('{status} · {count} episódio(s) assistido(s)').format(status=state, count=episodes)
+        if score:
+            result += ' · ' + tr('Nota: {score}/10').format(score=score)
+        return result

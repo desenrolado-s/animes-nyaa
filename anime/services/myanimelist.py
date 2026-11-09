@@ -105,9 +105,13 @@ def user_name(token):
     return _request(API_URL + '/users/@me', token=token).get('name', '')
 
 
-def get_progress(mal_id):
+def get_list_status(mal_id):
     result = _request(f'{API_URL}/anime/{int(mal_id)}?fields=my_list_status', token=access_token())
-    status = result.get('my_list_status') or {}
+    return result.get('my_list_status')
+
+
+def get_progress(mal_id):
+    status = get_list_status(mal_id) or {}
     return max(0, int(status.get('num_episodes_watched') or 0))
 
 
