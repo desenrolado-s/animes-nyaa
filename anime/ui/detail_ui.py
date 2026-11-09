@@ -11,7 +11,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Pango', '1.0')
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
-from ..services import anilist, episode_titles
+from ..services import anilist, episode_titles, mal_sync
 from ..storage import library, watch_progress
 from .common import IMAGE_POOL
 from .i18n import tr
@@ -249,6 +249,18 @@ class DetailUI:
         self.my_list_button = self.button('＋ Minha lista', self.toggle_current_anime_in_list)
         self.anime_info.append(self.my_list_button)
 
+        mal_heading = self.label('MyAnimeList', 'caption-heading')
+        self.anime_info.append(mal_heading)
+        self.anime_mal_status = self.label('', 'dim-label')
+        self.anime_mal_status.set_wrap(True)
+        self.anime_info.append(self.anime_mal_status)
+        self.mal_track_button = Gtk.Button()
+        self.mal_track_button.connect('clicked', self.toggle_mal_tracking)
+        self.anime_info.append(self.mal_track_button)
+        self.mal_edit_button = Gtk.Button(label=tr('Editar MyAnimeList'))
+        self.mal_edit_button.connect('clicked', self.open_mal_editor)
+        self.anime_info.append(self.mal_edit_button)
+
         summary_heading = self.label('SINOPSE', 'caption-heading')
         self.anime_info.append(summary_heading)
         self.anime_summary = self.label('')
@@ -339,6 +351,7 @@ class DetailUI:
         self.populate_episodes(count)
         self.refresh_watched_episodes()
         self.fetch_episode_titles(media)
+        self.queue_mal_sync(self.current_anime)
         self.stack.set_visible_child_name('anime')
         self.show_notice(tr(f'{count} episódios no catálogo.') if count else
                     tr('AniList não informa o total de episódios; você ainda pode buscar batches.'))
@@ -540,8 +553,10 @@ class DetailUI:
 
     def _change_episode_progress(self, _button, popover, numbers, watched):
         anime_id = (self.current_anime or {}).get('id')
-        if watch_progress.set_watched(anime_id, numbers, watched):
+        if mal_sync.change(anime_id, numbers, watched):
             self.refresh_watched_episodes()
+            if watched:
+                self.queue_mal_sync(self.current_anime, push_through=max(numbers))
         popover.popdown()
 
     def refresh_watched_episodes(self):

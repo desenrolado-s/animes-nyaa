@@ -20,10 +20,11 @@ from .ui.common import CommonUI
 from .ui.detail_ui import DetailUI
 from .ui.history_ui import HistoryUI
 from .ui.library_ui import LibraryUI
+from .ui.mal_ui import MalUI
 from .ui.results_ui import ResultsUI
 
 
-class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, HistoryUI, LibraryUI):
+class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, HistoryUI, LibraryUI, MalUI):
     def __init__(self, smoke=False):
         Adw.Application.__init__(self, application_id='io.github.desenrolado_s.AnimeNyaa')
         self.smoke = smoke
@@ -333,6 +334,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
 
     def show_settings(self):
         window = Adw.PreferencesWindow(transient_for=self.window, modal=True, title=tr('Configurações'))
+        window.connect('close-request', self.cancel_mal_authorization)
         window.set_default_size(700, 620)
         page = Adw.PreferencesPage(title=tr('Geral'), icon_name='preferences-system-symbolic')
         language_group = Adw.PreferencesGroup(title=tr('Idioma'))
@@ -409,6 +411,7 @@ class AnimeApp(Adw.Application, CommonUI, CatalogUI, DetailUI, ResultsUI, Histor
         info_row.add_suffix(api_link)
         lastfm_group.add(info_row)
         page.add(lastfm_group)
+        page.add(self.build_mal_settings())
         window.add(page)
         self.settings_window = window
         window.present()

@@ -16,8 +16,8 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Pango', '1.0')
 from gi.repository import Adw, GLib, Gtk, Pango
 
-from ..services import anilist, lastfm, nyaa, torrent
-from ..storage import history, lastfm_progress, library, settings, watch_progress
+from ..services import anilist, lastfm, mal_sync, nyaa, torrent
+from ..storage import history, lastfm_progress, library, settings
 from .common import CATEGORY_CODES
 from .i18n import tr
 
@@ -573,7 +573,8 @@ class ResultsUI:
         anime = self.current_anime if use_current_anime else None
         anime_id = (anime or {}).get('id') or item.get('anilist_id')
         try:
-            watch_progress.mark_watched(anime_id, episode_number)
+            if mal_sync.change(anime_id, [episode_number], True):
+                self.queue_mal_sync(anime or {'id': anime_id}, push_through=episode_number)
         except Exception as exc:
             self.show_notice(tr(f'A reprodução iniciou, mas não foi possível salvar o progresso: {exc}'))
         try:

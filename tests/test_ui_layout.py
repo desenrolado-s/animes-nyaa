@@ -1,6 +1,8 @@
 """Unit tests for anime detail layout persistence and tab navigation."""
 import unittest
 import tempfile
+import socket
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,7 +10,7 @@ try:
     import gi
     gi.require_version('Adw', '1')
     gi.require_version('Gtk', '4.0')
-    from gi.repository import Adw, Gdk, Gtk
+    from gi.repository import Adw, Gdk, GLib, Gtk
     HAS_GTK = bool(Gtk.init_check()) and Gdk.Display.get_default() is not None
     if HAS_GTK:
         Adw.init()
@@ -39,6 +41,101 @@ class DetailLayoutTests(unittest.TestCase):
         self.assertEqual(self.app.anime_paned.get_end_child(), self.app.anime_tabs)
         self.assertEqual(self.app.anime_tabs.get_visible_child_name(), 'episodes')
         self.assertEqual(self.app.episode_tab_stack.get_visible_child_name(), 'episodes')
+
+    def test_myanimelist_settings_start_authorization(self):
+        from anime.storage import settings
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.ui.mal_ui.webbrowser.open', return_value=True) as browser:
+            self.app.show_settings()
+            self.app.mal_client_entry.set_text('client-id')
+            with socket.socket() as sock:
+                sock.bind(('127.0.0.1', 0))
+                port = sock.getsockname()[1]
+            self.app.mal_redirect_entry.set_text(f'http://localhost:{port}/callback')
+            self.app.start_mal_authorization()
+            self.assertIn('client_id=client-id', browser.call_args.args[0])
+            self.assertEqual(settings.mal_credentials()['access_token'], '')
+            self.app._stop_mal_listener()
+            self.app.settings_window.close()
+
+    def test_myanimelist_does_not_authorize_when_callback_port_is_taken(self):
+        from anime.ui.i18n import tr
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.ui.mal_ui.webbrowser.open') as browser, socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            sock.listen()
+            self.app.show_settings()
+            self.app.mal_client_entry.set_text('client-id')
+            self.app.mal_redirect_entry.set_text(f'http://localhost:{sock.getsockname()[1]}/callback')
+            self.app.start_mal_authorization()
+            browser.assert_not_called()
+            self.assertEqual(self.app.mal_status.get_text(), tr('A porta de retorno está em uso. Feche o outro aplicativo ou escolha outra porta cadastrada no MyAnimeList.'))
+            self.app.settings_window.close()
+
+    def test_myanimelist_anime_status_shows_progress_and_ignores_stale_results(self):
+        from anime.storage import settings
+        from anime.ui.i18n import tr
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)):
+            settings.set_mal_credentials(username='alice', refresh_token='token')
+            self.app._mal_status_generation = 2
+            self.app._mal_sync_finished(100, 2, 'alice',
+                                        {'status': 'watching', 'num_episodes_watched': 4, 'score': 8}, None)
+            text = self.app.anime_mal_status.get_text()
+            self.assertIn(tr('Assistindo'), text)
+            self.assertIn('4', text)
+            self.assertIn('8/10', text)
+            self.app._mal_sync_finished(100, 1, 'alice', None, None)
+            self.assertEqual(self.app.anime_mal_status.get_text(), text)
+            self.app._mal_sync_finished(100, 2, 'alice', None, None)
+            self.assertEqual(self.app.anime_mal_status.get_text(),
+                             tr('Este anime ainda não está na sua lista do MyAnimeList.'))
+            settings.set_mal_credentials(refresh_token='')
+            self.app.queue_mal_sync(self.app.current_anime)
+            self.assertEqual(self.app.anime_mal_status.get_text(), tr('Conecte sua conta nas configurações.'))
+
+    def test_opening_untracked_anime_never_starts_mal_sync(self):
+        from anime.storage import settings
+        from anime.ui.i18n import tr
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.ui.mal_ui.mal_sync.sync') as sync:
+            settings.set_mal_credentials(username='alice', refresh_token='token')
+            self.app.queue_mal_sync(self.app.current_anime)
+            sync.assert_not_called()
+            self.assertEqual(self.app.anime_mal_status.get_text(), tr('Este anime não está vinculado.'))
+            self.assertFalse(self.app.mal_edit_button.get_sensitive())
+
+    def test_mal_editor_only_saves_fields_user_changed(self):
+        from anime.services import mal_sync
+        from anime.storage import settings
+        with tempfile.TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)), \
+             patch('anime.services.myanimelist.update_list_status') as update, \
+             patch.object(self.app, 'queue_mal_sync'):
+            settings.set_mal_credentials(username='alice', refresh_token='token')
+            mal_sync.set_tracked(100, True)
+            self.app._show_mal_editor(self.app.current_anime, 20,
+                                      {'status': 'watching', 'num_episodes_watched': 300,
+                                       'score': 7, 'is_rewatching': False}, False)
+            windows = Gtk.Window.get_toplevels()
+            window = next(windows.get_item(i) for i in range(windows.get_n_items())
+                          if windows.get_item(i).get_transient_for() == self.app.window)
+            box = window.get_child()
+            widgets = []
+            child = box.get_first_child()
+            while child:
+                widgets.append(child)
+                child = child.get_next_sibling()
+            spins = [child for child in widgets if isinstance(child, Gtk.SpinButton)]
+            spins[0].set_value(301)
+            switch = next(child.get_last_child() for child in widgets
+                          if isinstance(child, Gtk.Box) and isinstance(child.get_last_child(), Gtk.Switch))
+            switch.set_active(True)
+            next(child for child in widgets if isinstance(child, Gtk.Button)).emit('clicked')
+            deadline = time.monotonic() + 2
+            while not update.called and time.monotonic() < deadline:
+                GLib.MainContext.default().iteration(False)
+                time.sleep(0.01)
+            update.assert_called_once_with(20, {'num_watched_episodes': 301, 'is_rewatching': 'true'})
+            window.close()
 
     def test_episode_search_keeps_overview_visible(self):
         with patch.object(self.app, 'search_releases'):
