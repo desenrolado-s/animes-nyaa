@@ -25,11 +25,22 @@ def watched_episodes(anilist_id):
 
 
 def mark_watched(anilist_id, episode_number):
-    if anilist_id is None or not isinstance(episode_number, int) or episode_number < 1:
+    return set_watched(anilist_id, [episode_number], True)
+
+
+def set_watched(anilist_id, episode_numbers, watched):
+    """Update a group of episodes in one write, preserving other progress."""
+    numbers = {number for number in episode_numbers
+               if isinstance(number, int) and not isinstance(number, bool) and number > 0}
+    if anilist_id is None or not numbers:
         return False
     progress = load()
-    episodes = set(watched_episodes(anilist_id))
-    episodes.add(episode_number)
+    raw = progress.get(str(anilist_id), [])
+    episodes = {number for number in raw if isinstance(number, int) and number > 0} if isinstance(raw, list) else set()
+    if watched:
+        episodes.update(numbers)
+    else:
+        episodes.difference_update(numbers)
     progress[str(anilist_id)] = sorted(episodes)
     _write(progress)
     return True

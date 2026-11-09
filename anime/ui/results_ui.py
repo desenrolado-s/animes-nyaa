@@ -16,8 +16,8 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Pango', '1.0')
 from gi.repository import Adw, GLib, Gtk, Pango
 
-from ..services import anilist, lastfm, nyaa, torrent
-from ..storage import history, lastfm_progress, library, settings, watch_progress
+from ..services import anilist, lastfm, mal_sync, nyaa, torrent
+from ..storage import history, lastfm_progress, library, settings
 from .common import CATEGORY_CODES
 from .i18n import tr
 
@@ -498,11 +498,21 @@ class ResultsUI:
             row.add_suffix(watched_badge)
             row.set_activatable(True)
             row.connect('activated', lambda *_args, selected=file: self.play_batch_episode(selected))
+            self.add_episode_context_menu(row, number,
+                                          lambda selected=file: self.batch_episodes_above(selected))
             self.batch_episode_list.append(row)
             self.batch_episode_rows.append((number, filename, row, file))
             self.batch_watched_badges.setdefault(number, []).append(watched_badge)
         self.batch_files_rendered = end
         return False
+
+    def batch_episodes_above(self, selected):
+        numbers = []
+        for number, _filename, file in self.batch_episode_files:
+            if file is selected:
+                break
+            numbers.append(number)
+        return numbers
 
     def play_batch_episode(self, file):
         if getattr(self, 'selected_batch', None):
@@ -563,7 +573,8 @@ class ResultsUI:
         anime = self.current_anime if use_current_anime else None
         anime_id = (anime or {}).get('id') or item.get('anilist_id')
         try:
-            watch_progress.mark_watched(anime_id, episode_number)
+            if mal_sync.change(anime_id, [episode_number], True):
+                self.queue_mal_sync(anime or {'id': anime_id}, push_through=episode_number)
         except Exception as exc:
             self.show_notice(tr(f'A reprodução iniciou, mas não foi possível salvar o progresso: {exc}'))
         try:

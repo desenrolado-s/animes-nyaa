@@ -61,3 +61,9 @@ Pre-built binaries (AppImage and `.tar.gz`) are available on the [Releases](http
 ## Contributing
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a Pull Request. **Always use the `dev` branch.**
+
+### MyAnimeList progress sync
+
+Create an API client at https://myanimelist.net/apiconfig and register the same redirect URL shown in Settings (for example `http://localhost:8765/callback`). Enter its client ID, client secret if issued, and redirect URL, then choose **Authorize**. The app receives the callback automatically for an HTTP localhost or 127.0.0.1 redirect with an explicit port. If that port is in use, close the other application or register and select a different port. For other redirect URLs, copy the complete URL from the browser after granting access and paste it into **URL after authorization**. The authorization URL contains a one-time code and should not be shared.
+
+Tracking is opt-in per anime: use **Track on MyAnimeList** in the anime overview. Opening an untracked anime never reads or updates its MyAnimeList entry. For tracked anime, opening imports the remote watched count without modifying it. Playback and manually marking watched episodes can advance the remote count, but never reduce it automatically. Use **Edit MyAnimeList** to explicitly change status, progress, score or rewatch fields, including reducing progress when desired. Local marks outside the consecutive sequence are kept locally. If an automatic update fails, it is not retried automatically; retry the action or use the editor. Tokens are stored in the application's settings file with owner-only permissions. Disconnect in Settings to remove them.
